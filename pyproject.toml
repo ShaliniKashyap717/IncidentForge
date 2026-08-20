@@ -5,19 +5,35 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "incidentforge"
 version = "0.1.0"
-description = "IncidentForge project scaffold"
+description = "IncidentForge - Multi-Agent Engineering Incident Intelligence Platform"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
-authors = [{ name = "IncidentForge" }]
+authors = [{ name = "Shalini Kashyap" }]
 dependencies = [
-  "fastapi>=0.111.0",
-  "uvicorn>=0.30.0",
+    "fastapi>=0.111.0",
+    "uvicorn>=0.30.0",
+]
+
+[tool.setuptools.packages.find]
+include = [
+    "app*",
+    "agents*",
+    "models*",
+    "orchestrator*",
+    "tools*",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+pythonpath = ["."]
 
-[tool.setuptools]
-packages = ["app"]
+[tool.black]
+line-length = 88
+
+[tool.ruff]
+line-length = 88
+
+[tool.isort]
+profile = "black"

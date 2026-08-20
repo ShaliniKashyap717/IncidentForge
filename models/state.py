@@ -1,3 +1,19 @@
-"""State domain model for workflow tracking."""
+from pydantic import BaseModel, Field
 
-# TODO: Define state representations for orchestration and execution.
+from models.incident import Incident
+from models.investigation import Investigation
+from models.recommendation import Recommendation
+
+
+class IncidentState(BaseModel):
+    """
+    Shared state passed throughout an incident investigation.
+    """
+
+    incident: Incident
+
+    investigation: Investigation
+
+    recommendations: list[Recommendation] = Field(
+        default_factory=list
+    )
