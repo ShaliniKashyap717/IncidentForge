@@ -1,4 +1,7 @@
 {
   "scenario": "payment_latency",
-  "status": "placeholder"
+  "summary": "Payment API latency spiked sharply after a deployment, with p99 latency rising from ~250ms to ~6.1s and slow traces showing payment authorization and downstream inventory/database calls dominating request time.",
+  "service": "payment-api",
+  "anomaly": "latency_spike",
+  "confidence": 0.9
 }

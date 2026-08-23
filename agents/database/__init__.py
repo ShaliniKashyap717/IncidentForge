@@ -1,3 +1,3 @@
 """Database agent package."""
 
-# TODO: Expose database agent interfaces and metadata.
+from agents.database.agent import DatabaseAgent

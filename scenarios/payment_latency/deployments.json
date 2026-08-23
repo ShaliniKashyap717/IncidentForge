@@ -1,4 +1,22 @@
 {
   "scenario": "payment_latency",
-  "status": "placeholder"
+  "status": "placeholder",
+  "deployments": [
+    {
+      "id": "deploy-4821",
+      "service": "payment-api",
+      "timestamp": "2026-08-21T11:52:00Z",
+      "version": "2026.08.21.13",
+      "status": "deployed",
+      "notes": "Upgrade payment retry policy and timeout configuration."
+    },
+    {
+      "id": "deploy-4819",
+      "service": "inventory-api",
+      "timestamp": "2026-08-21T11:48:00Z",
+      "version": "2026.08.21.11",
+      "status": "deployed",
+      "notes": "Adjusted inventory reservation retries and backoff."
+    }
+  ]
 }

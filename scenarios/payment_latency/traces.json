@@ -1,4 +1,42 @@
 {
   "scenario": "payment_latency",
-  "status": "placeholder"
+  "status": "placeholder",
+  "service": "payment-api",
+  "traces": [
+    {
+      "trace_id": "a1b2c3d4",
+      "root_service": "checkout-api",
+      "latency_ms": 6200,
+      "status": "error",
+      "slow_spans": [
+        {"service": "payment-api", "name": "payment.authorize", "duration_ms": 4300},
+        {"service": "inventory-api", "name": "inventory.reserve", "duration_ms": 2100},
+        {"service": "database", "name": "payments_db.query", "duration_ms": 1800}
+      ],
+      "dependencies": ["checkout-api", "payment-api", "inventory-api", "database"]
+    },
+    {
+      "trace_id": "e5f6a7b8",
+      "root_service": "checkout-api",
+      "latency_ms": 5800,
+      "status": "error",
+      "slow_spans": [
+        {"service": "payment-api", "name": "payment.authorize", "duration_ms": 3900},
+        {"service": "inventory-api", "name": "inventory.reserve", "duration_ms": 1900},
+        {"service": "database", "name": "payments_db.query", "duration_ms": 1600}
+      ],
+      "dependencies": ["checkout-api", "payment-api", "inventory-api", "database"]
+    },
+    {
+      "trace_id": "c9d0e1f2",
+      "root_service": "checkout-api",
+      "latency_ms": 320,
+      "status": "ok",
+      "slow_spans": [
+        {"service": "payment-api", "name": "payment.authorize", "duration_ms": 170},
+        {"service": "inventory-api", "name": "inventory.reserve", "duration_ms": 120}
+      ],
+      "dependencies": ["checkout-api", "payment-api", "inventory-api"]
+    }
+  ]
 }

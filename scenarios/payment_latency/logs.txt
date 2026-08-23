@@ -1,1 +1,6 @@
-Placeholder log content.
+2026-08-21T12:03:42Z WARN checkout-api Request latency rose to 4.7s for payment authorization
+2026-08-21T12:04:16Z ERROR payment-api Payment authorization timed out after 5.8s
+2026-08-21T12:04:20Z ERROR inventory-api Inventory reserve call exceeded 2.1s while payment was retrying
+2026-08-21T12:05:01Z WARN payment-api Retry policy triggered with exponential backoff after gateway timeout
+2026-08-21T12:05:58Z ERROR checkout-api Checkout request failed: upstream payment service timeout
+2026-08-21T12:08:44Z INFO payment-api Latency recovered to 320ms after timeout window

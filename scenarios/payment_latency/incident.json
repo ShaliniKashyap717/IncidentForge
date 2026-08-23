@@ -1,4 +1,8 @@
 {
-  "scenario": "payment_latency",
-  "status": "placeholder"
+  "id": "INC-2026-1042",
+  "title": "Payment API latency spike",
+  "description": "Checkout requests to the payment service are intermittently taking 4-8s, causing elevated timeouts and customer checkout failures.",
+  "severity": "high",
+  "affected_services": ["checkout-api", "payment-api", "inventory-api"],
+  "status": "investigating"
 }

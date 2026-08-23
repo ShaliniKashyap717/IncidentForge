@@ -1,4 +1,22 @@
 {
   "scenario": "payment_latency",
-  "status": "placeholder"
+  "status": "placeholder",
+  "service": "payment-api",
+  "commits": [
+    {
+      "sha": "a9e01f2",
+      "author": "cassandra",
+      "message": "Increase payment retry timeout from 2s to 5s"
+    },
+    {
+      "sha": "d3f81ad",
+      "author": "jordan",
+      "message": "Add backoff jitter to payment authorization calls"
+    },
+    {
+      "sha": "ce11bf7",
+      "author": "mira",
+      "message": "Batch payment retries for failed gateway responses"
+    }
+  ]
 }
