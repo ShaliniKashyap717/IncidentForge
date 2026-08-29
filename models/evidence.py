@@ -23,8 +23,13 @@ class Evidence(BaseModel):
     A single piece of evidence collected during an investigation.
     """
 
+    id: str | None = None
+
     type: EvidenceType
-    source: str = Field(description="System or tool that produced the evidence.")
+    source: str = Field(
+        description="System or tool that produced the evidence."
+    )
     description: str
     timestamp: str | None = None
     relevance: float = Field(ge=0.0, le=1.0)
+
