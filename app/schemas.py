@@ -2,17 +2,22 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Optional
 
 from pydantic import BaseModel
 
 from models.incident import Incident
+from models.recommendation import RecommendationStatus
 
 
 class InvestigationCreateRequest(BaseModel):
-    """Request to create a new investigation."""
+    """Request to create a new investigation.
 
-    incident: Incident
+    Either provide a scenario name OR provide incident + context manually.
+    """
+
+    scenario: str | None = None
+    incident: Incident | None = None
     context: dict[str, Any] = {}
     use_llm: bool = False
 
@@ -39,6 +44,24 @@ class InvestigationListResponse(BaseModel):
     investigations: list[InvestigationSummaryResponse]
 
 
+class ScenarioListResponse(BaseModel):
+    """Response for listing available scenarios."""
+
+    scenarios: list[str]
+
+
+class ScenarioResponse(BaseModel):
+    """Response for a single scenario."""
+
+    name: str
+    incident: dict[str, Any]
+    logs: list[dict[str, Any]]
+    metrics: dict[str, Any]
+    traces: dict[str, Any]
+    deployments: dict[str, Any]
+    commits: dict[str, Any]
+
+
 class EvidenceResponse(BaseModel):
     """Response for evidence endpoint."""
 
@@ -55,6 +78,21 @@ class RecommendationsResponse(BaseModel):
     """Response for recommendations endpoint."""
 
     recommendations: list[dict[str, Any]]
+
+
+class RecommendationActionRequest(BaseModel):
+    """Request for approve/reject recommendation."""
+
+    note: Optional[str] = None
+
+
+class RecommendationActionResponse(BaseModel):
+    """Response for approve/reject recommendation."""
+
+    recommendation_index: int
+    action: str
+    status: RecommendationStatus
+    message: str
 
 
 class TimelineResponse(BaseModel):
