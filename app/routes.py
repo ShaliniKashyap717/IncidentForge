@@ -6,6 +6,7 @@ import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 
 from app.dependencies import get_state_store_instance, get_workflow
 from app.schemas import (
@@ -41,6 +42,9 @@ def _to_summary_response(investigation_id: str, state_manager) -> InvestigationS
         incident_id=summary["incident_id"],
         incident_title=summary["incident_title"],
         status=summary["status"],
+        stage=summary["stage"],
+        progress=summary["progress"],
+        error=summary.get("error"),
         evidence_count=summary["evidence_count"],
         findings_count=summary["findings_count"],
         recommendations_count=summary["recommendations_count"],
@@ -97,12 +101,10 @@ async def create_investigation(
     workflow: IncidentWorkflow = Depends(get_workflow),
     state_store: InvestigationStateStore = Depends(get_state_store_instance),
 ) -> InvestigationSummaryResponse:
-    """Create and run a new investigation.
+    """Create and run a new investigation in the background.
 
     Either provide a scenario name (e.g., "payment_latency") OR provide incident + context manually.
     """
-    investigation_id = str(uuid.uuid4())
-
     if request.scenario:
         # Load scenario using existing logic
         scenario_path = SCENARIOS_DIR / request.scenario
@@ -138,7 +140,7 @@ async def create_investigation(
         incident = request.incident
         context = request.context
 
-    state_manager = await workflow.start(
+    investigation_id, state_manager = await workflow.start_background(
         incident,
         context,
         use_llm=request.use_llm,
@@ -366,4 +368,53 @@ async def reject_recommendation(
         action="reject",
         status=RecommendationStatus.REJECTED,
         message=f"Recommendation rejected: {recommendation.action}{note}",
+    )
+
+
+@router.get(
+    "/investigations/{investigation_id}/stream",
+)
+async def stream_investigation(
+    investigation_id: str,
+    state_store: InvestigationStateStore = Depends(get_state_store_instance),
+) -> StreamingResponse:
+    """Stream investigation updates via Server-Sent Events (SSE)."""
+    state_manager = state_store.get(investigation_id)
+    if state_manager is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Investigation '{investigation_id}' not found",
+        )
+
+    async def event_generator():
+        import json
+        import asyncio
+
+        last_event_index = 0
+
+        # Send initial state
+        yield f"data: {json.dumps({'type': 'state', 'data': state_manager.export_state()})}\n\n"
+
+        # Stream new events as they arrive
+        while True:
+            await asyncio.sleep(0.5)
+            events = state_manager.timeline.get_events()
+            new_events = events[last_event_index:]
+            for event in new_events:
+                yield f"data: {json.dumps({'type': 'event', 'data': event})}\n\n"
+            last_event_index = len(events)
+
+            # Stop streaming if investigation is complete or failed
+            if state_manager.status in ("complete", "failed"):
+                yield f"data: {json.dumps({'type': 'complete', 'data': state_manager.export_state()})}\n\n"
+                break
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )

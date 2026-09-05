@@ -205,7 +205,7 @@ def test_timeline_contains_key_events(state_manager: InvestigationStateManager) 
     event_types = {event["type"] for event in timeline}
 
     # Events added by IncidentCommander.investigate()
-    assert "incident_created" in event_types
+    assert "investigation_created" in event_types
     assert "commander_triage" in event_types
     assert "agent_started" in event_types
     assert "evidence_added" in event_types

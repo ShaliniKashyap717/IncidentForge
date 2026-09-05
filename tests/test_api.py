@@ -53,7 +53,8 @@ def test_create_investigation() -> None:
     data = response.json()
     assert "investigation_id" in data
     assert data["incident_id"] == "INC-TEST-001"
-    assert data["status"] == "complete"
+    # Background investigation returns immediately with created status
+    assert data["status"] == "created"
     assert data["evidence_count"] >= 0
     assert data["findings_count"] >= 0
     assert data["recommendations_count"] >= 0
@@ -425,10 +426,12 @@ def test_create_investigation_with_scenario_payment_latency() -> None:
     assert "investigation_id" in data
     assert data["incident_id"] == "INC-2026-1042"
     assert data["incident_title"] == "Payment API latency spike"
-    assert data["status"] == "complete"
-    assert data["evidence_count"] >= 3
-    assert data["findings_count"] >= 1
-    assert data["recommendations_count"] >= 1
+    # Background investigation returns immediately with created status
+    assert data["status"] == "created"
+    assert data["stage"] == "queued"
+    assert data["progress"] == 0.0
+    # Evidence/findings will be 0 initially, populated after completion
+    # (checked in test_investigation_completes_after_creation)
 
 
 def test_create_investigation_with_scenario_db_lock_contention() -> None:
@@ -445,10 +448,11 @@ def test_create_investigation_with_scenario_db_lock_contention() -> None:
     assert "investigation_id" in data
     assert data["incident_id"] == "INC-2026-1055"
     assert data["incident_title"] == "Database lock contention on payments table"
-    assert data["status"] == "complete"
-    assert data["evidence_count"] >= 3
-    assert data["findings_count"] >= 1
-    assert data["recommendations_count"] >= 1
+    # Background investigation returns immediately with created status
+    assert data["status"] == "created"
+    assert data["stage"] == "queued"
+    assert data["progress"] == 0.0
+    # Evidence/findings will be 0 initially, populated after completion
 
 
 def test_create_investigation_invalid_scenario_returns_404() -> None:
@@ -541,13 +545,55 @@ def test_scenario_investigation_timeline_has_real_events() -> None:
     assert response.status_code == 201
     investigation_id = response.json()["investigation_id"]
 
+    # Poll until investigation completes
+    import time
+    for _ in range(30):
+        state_response = client.get(f"/api/v1/investigations/{investigation_id}/state")
+        assert state_response.status_code == 200
+        state = state_response.json()
+        if state["status"] == "complete":
+            break
+        time.sleep(0.1)
+
     timeline_response = client.get(f"/api/v1/investigations/{investigation_id}/timeline")
     assert timeline_response.status_code == 200
     timeline = timeline_response.json()["timeline"]
 
     event_types = {e["type"] for e in timeline}
-    assert "incident_created" in event_types
+    assert "investigation_created" in event_types
     assert "commander_triage" in event_types
     assert "telemetry_analyzed" in event_types
     assert "repository_analyzed" in event_types
     assert "investigation_completed" in event_types
+
+
+def test_investigation_completes_after_creation() -> None:
+    """Test that a background investigation eventually completes."""
+    request_body = {
+        "scenario": "payment_latency",
+        "use_llm": False,
+    }
+
+    response = client.post("/api/v1/investigations", json=request_body)
+    assert response.status_code == 201
+    investigation_id = response.json()["investigation_id"]
+
+    # Initial status should be created
+    assert response.json()["status"] == "created"
+
+    # Poll until complete
+    import time
+    for _ in range(30):
+        state_response = client.get(f"/api/v1/investigations/{investigation_id}/state")
+        assert state_response.status_code == 200
+        state = state_response.json()
+        if state["status"] == "complete":
+            break
+        time.sleep(0.1)
+
+    assert state["status"] == "complete"
+    assert state["stage"] == "completed"
+    assert state["progress"] == 100.0
+    assert len(state["evidence"]) > 0
+    assert len(state["findings"]) > 0
+    assert len(state["recommendations"]) > 0

@@ -87,10 +87,13 @@ class InvestigationStateManager:
         self.completed_tasks: list[str] = []
 
         self.timeline = InvestigationTimeline()
-        self.status = "investigating"
+        self.status = "created"
+        self.stage = "initialized"
+        self.progress = 0.0
+        self.error: str | None = None
 
         self.investigation_started_at = datetime.now()
-        self.timeline.add_event("incident_created", f"Incident {incident.id} created: {incident.title}")
+        self.timeline.add_event("investigation_created", f"Incident {incident.id} created: {incident.title}")
 
     def start_agent(self, agent_name: str) -> None:
         """Mark an agent as started.
@@ -168,6 +171,29 @@ class InvestigationStateManager:
             f"Hypothesis: {hypothesis.description} (confidence={hypothesis.confidence:.2f})",
         )
 
+    def set_stage(self, stage: str, progress: float | None = None) -> None:
+        """Update the investigation stage and optional progress.
+
+        Args:
+            stage: Current stage (e.g., 'queued', 'running', 'analyzing', 'recommending', 'completed')
+            progress: Optional progress percentage (0-100)
+        """
+        self.stage = stage
+        if progress is not None:
+            self.progress = max(0.0, min(100.0, progress))
+        self.timeline.add_event("stage_changed", f"Stage: {stage} ({self.progress:.0f}%)")
+
+    def mark_failed(self, error: str) -> None:
+        """Mark the investigation as failed.
+
+        Args:
+            error: Error message describing the failure.
+        """
+        self.status = "failed"
+        self.error = error
+        self.stage = "failed"
+        self.timeline.add_event("investigation_failed", f"Investigation failed: {error}")
+
     def add_task(self, task_description: str) -> None:
         """Add a pending task.
 
@@ -198,6 +224,9 @@ class InvestigationStateManager:
             "incident_id": self.incident.id,
             "incident_title": self.incident.title,
             "status": self.status,
+            "stage": self.stage,
+            "progress": self.progress,
+            "error": self.error,
             "evidence_count": self.evidence_store.count(),
             "findings_count": len(self.findings),
             "hypotheses_count": len(self.hypotheses),
@@ -217,6 +246,9 @@ class InvestigationStateManager:
         return {
             "incident": self.incident.model_dump(mode="json"),
             "status": self.status,
+            "stage": self.stage,
+            "progress": self.progress,
+            "error": self.error,
             "investigation_started_at": self.investigation_started_at.isoformat(),
             "evidence": self.evidence_store.export_to_dict(),
             "findings": [f.model_dump(mode="json") for f in self.findings],
@@ -259,4 +291,6 @@ class InvestigationStateManager:
     def mark_complete(self) -> None:
         """Mark the investigation as complete."""
         self.status = "complete"
+        self.stage = "completed"
+        self.progress = 100.0
         self.timeline.add_event("investigation_completed", "Investigation concluded")

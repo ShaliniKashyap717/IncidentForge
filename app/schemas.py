@@ -29,6 +29,9 @@ class InvestigationSummaryResponse(BaseModel):
     incident_id: str
     incident_title: str
     status: str
+    stage: str
+    progress: float
+    error: str | None = None
     evidence_count: int
     findings_count: int
     recommendations_count: int
@@ -106,6 +109,9 @@ class FullStateResponse(BaseModel):
 
     incident: dict[str, Any]
     status: str
+    stage: str
+    progress: float
+    error: str | None = None
     investigation_started_at: str
     evidence: list[dict[str, Any]]
     findings: list[dict[str, Any]]
