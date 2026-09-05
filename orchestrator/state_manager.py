@@ -11,6 +11,7 @@ from models.incident import Incident
 from models.investigation import Investigation
 from models.recommendation import Recommendation
 from models.finding import Finding
+from models.hypothesis import Hypothesis
 from models.state import IncidentState
 
 from orchestrator.evidence_store import EvidenceStore
@@ -77,6 +78,7 @@ class InvestigationStateManager:
         self.evidence_store = EvidenceStore()
         self.findings: list[Finding] = []
         self.recommendations: list[Recommendation] = []
+        self.hypotheses: list[Hypothesis] = []
 
         self.active_agents: set[str] = set()
         self.completed_agents: set[str] = set()
@@ -154,6 +156,18 @@ class InvestigationStateManager:
             f"Recommendation: {recommendation.action}",
         )
 
+    def add_hypothesis(self, hypothesis: Hypothesis) -> None:
+        """Add a hypothesis to the investigation.
+
+        Args:
+            hypothesis: A Hypothesis object.
+        """
+        self.hypotheses.append(hypothesis)
+        self.timeline.add_event(
+            "hypothesis_proposed",
+            f"Hypothesis: {hypothesis.description} (confidence={hypothesis.confidence:.2f})",
+        )
+
     def add_task(self, task_description: str) -> None:
         """Add a pending task.
 
@@ -186,6 +200,7 @@ class InvestigationStateManager:
             "status": self.status,
             "evidence_count": self.evidence_store.count(),
             "findings_count": len(self.findings),
+            "hypotheses_count": len(self.hypotheses),
             "recommendations_count": len(self.recommendations),
             "active_agents": list(self.active_agents),
             "completed_agents": list(self.completed_agents),
@@ -205,6 +220,7 @@ class InvestigationStateManager:
             "investigation_started_at": self.investigation_started_at.isoformat(),
             "evidence": self.evidence_store.export_to_dict(),
             "findings": [f.model_dump(mode="json") for f in self.findings],
+            "hypotheses": [h.model_dump(mode="json") for h in self.hypotheses],
             "recommendations": [r.model_dump(mode="json") for r in self.recommendations],
             "active_agents": list(self.active_agents),
             "completed_agents": list(self.completed_agents),
@@ -230,7 +246,7 @@ class InvestigationStateManager:
         investigation = Investigation(
             started_at=self.investigation_started_at,
             findings=self.findings,
-            hypotheses=[],
+            hypotheses=self.hypotheses,
             investigation_steps=self.completed_tasks,
         )
 

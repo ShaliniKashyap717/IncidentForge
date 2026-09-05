@@ -6,6 +6,8 @@ from collections.abc import Callable
 from typing import Any
 
 from agents.observability.agent import ObservabilityAgent
+from agents.repository.agent import RepositoryAgent
+from agents.database.agent import DatabaseAgent
 from orchestrator.state_manager import InvestigationStateManager
 
 
@@ -21,6 +23,8 @@ class AgentDispatcher:
     def __init__(self) -> None:
         self._agents: dict[str, Callable[..., Any]] = {
             "observability": ObservabilityAgent,
+            "repository": RepositoryAgent,
+            "database": DatabaseAgent,
         }
 
     def register_agent(

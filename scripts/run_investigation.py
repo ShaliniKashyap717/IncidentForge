@@ -33,6 +33,8 @@ def print_investigation_report(state_manager: InvestigationStateManager) -> None
     print(f"Agents completed: {', '.join(summary['completed_agents']) or 'none'}")
     print(f"Evidence collected: {summary['evidence_count']}")
     print(f"Findings: {summary['findings_count']}")
+    print(f"Hypotheses: {summary.get('hypotheses_count', 0)}")
+    print(f"Recommendations: {summary['recommendations_count']}")
     print()
 
     # Print observability finding if available
@@ -59,7 +61,11 @@ def print_investigation_report(state_manager: InvestigationStateManager) -> None
     if state_manager.recommendations:
         print("=== RECOMMENDATIONS ===")
         for rec in state_manager.recommendations:
-            print(f"- [{rec.priority.value}] {rec.action} ({rec.rationale})")
+            print(f"- Action: {rec.action}")
+            print(f"  Rationale: {rec.rationale}")
+            print(f"  Risk: {rec.risk}")
+            print(f"  Confidence: {rec.confidence:.2f}")
+            print(f"  Requires Approval: {rec.requires_approval}")
         print()
 
     # Print timeline

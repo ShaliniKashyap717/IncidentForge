@@ -37,13 +37,13 @@ class EvidenceStore:
         - description
         """
         content = json.dumps(
-            {
-                "source": evidence.source,
-                "type": evidence.type,
-                "service": evidence.source,
-                "description": evidence.description,
-            },
-            sort_keys=True,
+    {
+        "source": evidence.source,
+        "type": evidence.type,
+        "description": evidence.description,
+        "timestamp": evidence.timestamp,
+    },
+    sort_keys=True,
         )
         return hashlib.sha256(content.encode()).hexdigest()
 

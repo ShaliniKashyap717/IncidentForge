@@ -1,0 +1,25 @@
+{
+  "scenario": "db_lock_contention",
+  "status": "placeholder",
+  "service": "database",
+  "metric": "db.query.duration.p99",
+  "unit": "ms",
+  "window": "2026-08-22T10:00:00Z/2026-08-22T10:10:00Z",
+  "series": [
+    {"timestamp": "2026-08-22T10:00:00Z", "value": 45},
+    {"timestamp": "2026-08-22T10:01:00Z", "value": 52},
+    {"timestamp": "2026-08-22T10:02:00Z", "value": 61},
+    {"timestamp": "2026-08-22T10:03:00Z", "value": 1800},
+    {"timestamp": "2026-08-22T10:04:00Z", "value": 3200},
+    {"timestamp": "2026-08-22T10:05:00Z", "value": 2900},
+    {"timestamp": "2026-08-22T10:06:00Z", "value": 3100},
+    {"timestamp": "2026-08-22T10:07:00Z", "value": 1200},
+    {"timestamp": "2026-08-22T10:08:00Z", "value": 980},
+    {"timestamp": "2026-08-22T10:09:00Z", "value": 75},
+    {"timestamp": "2026-08-22T10:10:00Z", "value": 58}
+  ],
+  "anomaly": {
+    "type": "latency_spike",
+    "description": "Database query p99 latency spiked from ~50ms to ~3.1s within 3 minutes, consistent with lock contention."
+  }
+}

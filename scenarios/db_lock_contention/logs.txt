@@ -1,0 +1,6 @@
+2026-08-22T10:03:12Z WARN payment-api Query on payments table taking longer than expected
+2026-08-22T10:03:45Z ERROR database Lock wait timeout exceeded on table payments
+2026-08-22T10:04:01Z ERROR payment-api Deadlock detected when updating payment records
+2026-08-22T10:04:18Z ERROR checkout-api Upstream database error: lock wait timeout
+2026-08-22T10:05:33Z WARN database Blocked process detected: session 1234 waiting for lock on payments
+2026-08-22T10:07:22Z INFO database Lock contention resolved after long-running transaction completed

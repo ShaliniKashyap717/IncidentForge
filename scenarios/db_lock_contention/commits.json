@@ -1,0 +1,17 @@
+{
+  "scenario": "db_lock_contention",
+  "status": "placeholder",
+  "service": "payment-api",
+  "commits": [
+    {
+      "sha": "e8f9a1b",
+      "author": "alex",
+      "message": "Increase payment batch processing from 100 to 500 records"
+    },
+    {
+      "sha": "c3d4e5f",
+      "author": "sam",
+      "message": "Add index on payments.status and payments.created_at"
+    }
+  ]
+}

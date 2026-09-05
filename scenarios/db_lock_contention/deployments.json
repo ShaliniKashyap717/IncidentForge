@@ -1,0 +1,22 @@
+{
+  "scenario": "db_lock_contention",
+  "status": "placeholder",
+  "deployments": [
+    {
+      "id": "deploy-5012",
+      "service": "database",
+      "timestamp": "2026-08-22T09:55:00Z",
+      "version": "2026.08.22.03",
+      "status": "deployed",
+      "notes": "Schema migration: added indexes on payments table"
+    },
+    {
+      "id": "deploy-5010",
+      "service": "payment-api",
+      "timestamp": "2026-08-22T09:48:00Z",
+      "version": "2026.08.22.02",
+      "status": "deployed",
+      "notes": "Increased batch size for payment processing"
+    }
+  ]
+}

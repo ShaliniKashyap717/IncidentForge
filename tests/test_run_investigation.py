@@ -226,10 +226,196 @@ def test_investigation_completes_without_errors(state_manager: InvestigationStat
     # Should not raise any exceptions
     commander.investigate(state_manager, scenario, use_llm=False)
 
-    # Status should be investigating (not complete, since we didn't mark it complete)
-    assert state_manager.status == "investigating"
+    # Status should be complete after synthesis
+    assert state_manager.status == "complete"
 
     # No error events in timeline
     timeline = state_manager.timeline.get_events()
     error_events = [e for e in timeline if "error" in e["type"].lower()]
     assert len(error_events) == 0
+
+
+def test_investigation_has_findings_hypotheses_recommendations(
+    state_manager: InvestigationStateManager,
+) -> None:
+    """Test that the investigation produces findings, hypotheses, and recommendations."""
+    from agents.incident_commander.agent import create_incident_commander
+
+    commander = create_incident_commander()
+    scenario = load_scenario(SCENARIO_DIR)
+
+    commander.investigate(state_manager, scenario, use_llm=False)
+
+    # Verify findings, hypotheses, recommendations are all > 0
+    assert len(state_manager.findings) > 0
+    assert len(state_manager.hypotheses) > 0
+    assert len(state_manager.recommendations) > 0
+
+    # Verify status is complete
+    assert state_manager.status == "complete"
+
+    # Verify agents are in completed_agents
+    summary = state_manager.get_status_summary()
+    assert "Observability Agent" in summary["completed_agents"]
+    assert "Incident Commander" in summary["completed_agents"]
+
+    # Verify timeline contains investigation_completed event
+    timeline = state_manager.timeline.get_events()
+    event_types = {event["type"] for event in timeline}
+    assert "investigation_completed" in event_types
+
+    # Verify timeline contains key synthesis events
+    assert "finding_received" in event_types
+    assert "hypothesis_synthesized" in event_types
+    assert "recommendation_generated" in event_types
+
+
+def test_exported_state_contains_hypotheses_and_recommendations(
+    state_manager: InvestigationStateManager,
+) -> None:
+    """Test that the exported state includes hypotheses and recommendations."""
+    from agents.incident_commander.agent import create_incident_commander
+
+    commander = create_incident_commander()
+    scenario = load_scenario(SCENARIO_DIR)
+
+    commander.investigate(state_manager, scenario, use_llm=False)
+
+    exported = state_manager.export_state()
+    assert "hypotheses" in exported
+    assert len(exported["hypotheses"]) > 0
+    assert "recommendations" in exported
+    assert len(exported["recommendations"]) > 0
+
+    # Verify hypothesis structure
+    hypothesis = exported["hypotheses"][0]
+    assert "description" in hypothesis
+    assert "confidence" in hypothesis
+    assert "supporting_evidence" in hypothesis
+    assert "status" in hypothesis
+
+    # Verify recommendation structure
+    recommendation = exported["recommendations"][0]
+    assert "action" in recommendation
+    assert "rationale" in recommendation
+    assert "risk" in recommendation
+    assert "confidence" in recommendation
+    assert "requires_approval" in recommendation
+    assert recommendation["requires_approval"] is True
+
+
+def test_repository_agent_is_selected(state_manager: InvestigationStateManager) -> None:
+    """Test that the repository agent is selected and executed for payment_latency."""
+    from agents.incident_commander.agent import create_incident_commander
+
+    commander = create_incident_commander()
+    scenario = load_scenario(SCENARIO_DIR)
+
+    commander.investigate(state_manager, scenario, use_llm=False)
+
+    summary = state_manager.get_status_summary()
+    assert "Repository Agent" in summary["completed_agents"]
+
+
+def test_repository_agent_executes(state_manager: InvestigationStateManager) -> None:
+    """Test that the repository agent executes and produces evidence."""
+    from agents.incident_commander.agent import create_incident_commander
+
+    commander = create_incident_commander()
+    scenario = load_scenario(SCENARIO_DIR)
+
+    commander.investigate(state_manager, scenario, use_llm=False)
+
+    # Check that repository evidence was collected
+    evidence = state_manager.evidence_store.get_all()
+    evidence_types = {e.type.value for e in evidence}
+
+    assert "code" in evidence_types
+    assert "deployment" in evidence_types
+
+    # Check that at least 2 findings exist (observability + repository)
+    assert len(state_manager.findings) >= 2
+
+    # Verify repository finding exists
+    repo_findings = [f for f in state_manager.findings if f.agent == "Repository Agent"]
+    assert len(repo_findings) == 1
+    repo_finding = repo_findings[0]
+    assert repo_finding.summary
+    assert repo_finding.hypothesis
+    assert 0.0 <= repo_finding.confidence <= 1.0
+
+
+def test_both_agents_in_completed_agents(state_manager: InvestigationStateManager) -> None:
+    """Test that both agents appear in completed_agents."""
+    from agents.incident_commander.agent import create_incident_commander
+
+    commander = create_incident_commander()
+    scenario = load_scenario(SCENARIO_DIR)
+
+    commander.investigate(state_manager, scenario, use_llm=False)
+
+    summary = state_manager.get_status_summary()
+    assert "Observability Agent" in summary["completed_agents"]
+    assert "Repository Agent" in summary["completed_agents"]
+    assert "Incident Commander" in summary["completed_agents"]
+
+
+def test_commander_synthesis_produces_hypothesis_and_recommendation(
+    state_manager: InvestigationStateManager,
+) -> None:
+    """Test that commander synthesis still produces at least 1 hypothesis and 1 recommendation."""
+    from agents.incident_commander.agent import create_incident_commander
+
+    commander = create_incident_commander()
+    scenario = load_scenario(SCENARIO_DIR)
+
+    commander.investigate(state_manager, scenario, use_llm=False)
+
+    assert len(state_manager.hypotheses) >= 1
+    assert len(state_manager.recommendations) >= 1
+
+    # Hypotheses should come from both agents' findings
+    assert len(state_manager.hypotheses) >= 2
+
+
+def test_final_status_is_complete(state_manager: InvestigationStateManager) -> None:
+    """Test that final status is complete."""
+    from agents.incident_commander.agent import create_incident_commander
+
+    commander = create_incident_commander()
+    scenario = load_scenario(SCENARIO_DIR)
+
+    commander.investigate(state_manager, scenario, use_llm=False)
+
+    assert state_manager.status == "complete"
+
+
+def test_timeline_records_repository_agent_activity(state_manager: InvestigationStateManager) -> None:
+    """Test that timeline records repository agent activity."""
+    from agents.incident_commander.agent import create_incident_commander
+
+    commander = create_incident_commander()
+    scenario = load_scenario(SCENARIO_DIR)
+
+    commander.investigate(state_manager, scenario, use_llm=False)
+
+    timeline = state_manager.timeline.get_events()
+    event_types = {event["type"] for event in timeline}
+
+    # Repository agent events
+    assert "repository_analyzed" in event_types
+    assert any(event.get("agent") and "Repository Agent" in event.get("agent", "") for event in timeline)
+
+
+def test_evidence_count_increased_with_repository(state_manager: InvestigationStateManager) -> None:
+    """Test that evidence count includes repository evidence."""
+    from agents.incident_commander.agent import create_incident_commander
+
+    commander = create_incident_commander()
+    scenario = load_scenario(SCENARIO_DIR)
+
+    commander.investigate(state_manager, scenario, use_llm=False)
+
+    # Should have observability evidence (3) + repository evidence (5) = 8
+    evidence = state_manager.evidence_store.get_all()
+    assert len(evidence) >= 8

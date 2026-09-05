@@ -1,0 +1,42 @@
+{
+  "scenario": "db_lock_contention",
+  "status": "placeholder",
+  "service": "payment-api",
+  "traces": [
+    {
+      "trace_id": "db1a2b3c",
+      "root_service": "checkout-api",
+      "latency_ms": 3800,
+      "status": "error",
+      "slow_spans": [
+        {"service": "payment-api", "name": "payment.authorize", "duration_ms": 1200},
+        {"service": "database", "name": "payments_db.query", "duration_ms": 2800},
+        {"service": "database", "name": "payments_db.lock_wait", "duration_ms": 2400}
+      ],
+      "dependencies": ["checkout-api", "payment-api", "database"]
+    },
+    {
+      "trace_id": "db4e5f6a",
+      "root_service": "checkout-api",
+      "latency_ms": 3200,
+      "status": "error",
+      "slow_spans": [
+        {"service": "payment-api", "name": "payment.authorize", "duration_ms": 900},
+        {"service": "database", "name": "payments_db.query", "duration_ms": 3100},
+        {"service": "database", "name": "payments_db.lock_wait", "duration_ms": 2700}
+      ],
+      "dependencies": ["checkout-api", "payment-api", "database"]
+    },
+    {
+      "trace_id": "db7b8c9d",
+      "root_service": "checkout-api",
+      "latency_ms": 450,
+      "status": "ok",
+      "slow_spans": [
+        {"service": "payment-api", "name": "payment.authorize", "duration_ms": 180},
+        {"service": "database", "name": "payments_db.query", "duration_ms": 45}
+      ],
+      "dependencies": ["checkout-api", "payment-api", "database"]
+    }
+  ]
+}

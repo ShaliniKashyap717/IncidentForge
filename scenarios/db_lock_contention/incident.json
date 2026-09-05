@@ -1,0 +1,8 @@
+{
+  "id": "INC-2026-1055",
+  "title": "Database lock contention on payments table",
+  "description": "Payment API requests are timing out due to database lock contention on the payments table, causing elevated 500 errors.",
+  "severity": "high",
+  "affected_services": ["payment-api", "checkout-api", "database"],
+  "status": "investigating"
+}
