@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
@@ -50,7 +51,16 @@ class ObservabilityAgent:
 		scenario: dict[str, Any],
 		use_llm: bool = True,
 	) -> Finding:
-		"""Run the observability investigation and update shared state."""
+		"""Run the observability investigation and update shared state (sync version)."""
+		return asyncio.run(self.investigate_async(state_manager, scenario, use_llm))
+
+	async def investigate_async(
+		self,
+		state_manager: InvestigationStateManager,
+		scenario: dict[str, Any],
+		use_llm: bool = True,
+	) -> Finding:
+		"""Run the observability investigation asynchronously with observable steps."""
 
 		state_manager.start_agent(self.name)
 		state_manager.add_task("Analyze observability telemetry")
@@ -59,8 +69,28 @@ class ObservabilityAgent:
 		evidence_pool: list[Evidence] = []
 
 		try:
-			logs_result = analyze_logs(scenario.get("logs", []), severity="ERROR")
+			state_manager.timeline.add_event(
+				"tool_started",
+				"Analyzing metrics for latency patterns",
+				self.name,
+			)
+			await asyncio.sleep(0.2)
 			metrics_result = analyze_metrics(scenario.get("metrics", {}))
+
+			state_manager.timeline.add_event(
+				"tool_started",
+				"Analyzing error logs for incident context",
+				self.name,
+			)
+			await asyncio.sleep(0.15)
+			logs_result = analyze_logs(scenario.get("logs", []), severity="ERROR")
+
+			state_manager.timeline.add_event(
+				"tool_started",
+				"Analyzing distributed traces for slow spans",
+				self.name,
+			)
+			await asyncio.sleep(0.15)
 			traces_result = analyze_traces(scenario.get("traces", {}))
 
 			analysis_results = {
@@ -88,7 +118,7 @@ class ObservabilityAgent:
 			state_manager.complete_task("Analyze observability telemetry")
 			state_manager.timeline.add_event(
 				"telemetry_analyzed",
-				"Metrics, logs, and traces were correlated into a structured finding.",
+				f"Metrics, logs, and traces correlated: {len(evidence_pool)} evidence items, confidence {finding.confidence:.0%}",
 				self.name,
 			)
 			state_manager.finish_agent(self.name)

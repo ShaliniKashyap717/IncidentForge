@@ -20,9 +20,10 @@ export function useInvestigationStream({
   const [lastEvent, setLastEvent] = useState<TimelineEvent | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
+  const isCompleteRef = useRef(false);
 
   const connect = useCallback(() => {
-    if (!investigationId || eventSourceRef.current) return;
+    if (!investigationId || eventSourceRef.current || isCompleteRef.current) return;
 
     try {
       const eventSource = new EventSource(`/api/v1/investigations/${investigationId}/stream`);
@@ -41,6 +42,7 @@ export function useInvestigationStream({
           } else if (data.type === 'state' && data.data) {
             onStateChange?.(data.data);
           } else if (data.type === 'complete' && data.data) {
+            isCompleteRef.current = true;
             onStateChange?.(data.data);
             onComplete?.(data.data);
             disconnect();
@@ -53,8 +55,11 @@ export function useInvestigationStream({
       eventSource.onerror = (err) => {
         console.error('SSE error:', err);
         setConnected(false);
-        onError?.(new Error('SSE connection lost'));
-        scheduleReconnect();
+        // Only reconnect if not complete and not intentionally disconnected
+        if (!isCompleteRef.current && eventSourceRef.current) {
+          onError?.(new Error('SSE connection lost'));
+          scheduleReconnect();
+        }
       };
     } catch (err) {
       onError?.(err instanceof Error ? err : new Error('Failed to connect'));
@@ -74,7 +79,7 @@ export function useInvestigationStream({
   }, []);
 
   const scheduleReconnect = useCallback(() => {
-    if (reconnectTimeoutRef.current) return;
+    if (reconnectTimeoutRef.current || isCompleteRef.current) return;
     reconnectTimeoutRef.current = window.setTimeout(() => {
       reconnectTimeoutRef.current = null;
       connect();
@@ -82,6 +87,7 @@ export function useInvestigationStream({
   }, [connect]);
 
   useEffect(() => {
+    isCompleteRef.current = false;
     connect();
     return () => {
       disconnect();

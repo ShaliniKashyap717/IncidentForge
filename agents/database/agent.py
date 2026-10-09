@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
@@ -45,7 +46,16 @@ class DatabaseAgent:
 		scenario: dict[str, Any],
 		use_llm: bool = True,
 	) -> Finding:
-		"""Run database analysis and update shared investigation state."""
+		"""Run database analysis and update shared investigation state (sync version)."""
+		return asyncio.run(self.investigate_async(state_manager, scenario, use_llm))
+
+	async def investigate_async(
+		self,
+		state_manager: InvestigationStateManager,
+		scenario: dict[str, Any],
+		use_llm: bool = True,
+	) -> Finding:
+		"""Run database analysis asynchronously with observable steps."""
 
 		state_manager.start_agent(self.name)
 		state_manager.add_task("Analyze database behavior")
@@ -57,8 +67,28 @@ class DatabaseAgent:
 			traces_payload = scenario.get("traces", {})
 			logs = scenario.get("logs", [])
 
+			state_manager.timeline.add_event(
+				"tool_started",
+				"Analyzing database query spans from traces",
+				self.name,
+			)
+			await asyncio.sleep(0.15)
 			query_result = analyze_database_queries(traces_payload)
+
+			state_manager.timeline.add_event(
+				"tool_started",
+				"Analyzing lock contention indicators",
+				self.name,
+			)
+			await asyncio.sleep(0.1)
 			lock_result = analyze_database_locks(logs, query_result.get("database_spans", []))
+
+			state_manager.timeline.add_event(
+				"tool_started",
+				"Analyzing database latency metrics",
+				self.name,
+			)
+			await asyncio.sleep(0.1)
 			metrics_result = analyze_database_metrics(
 				query_result.get("database_spans", []),
 				incident_title=str(incident.get("title", "incident")),
@@ -84,7 +114,7 @@ class DatabaseAgent:
 			state_manager.complete_task("Analyze database behavior")
 			state_manager.timeline.add_event(
 				"database_analyzed",
-				"Database spans, locks, and latency indicators were analyzed.",
+				f"Database analysis: {len(evidence_pool)} evidence items, confidence {finding.confidence:.0%}",
 				self.name,
 			)
 			state_manager.finish_agent(self.name)

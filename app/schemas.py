@@ -37,8 +37,12 @@ class InvestigationSummaryResponse(BaseModel):
     recommendations_count: int
     active_agents: list[str]
     completed_agents: list[str]
+    selected_agents: list[str] = []
     pending_tasks: list[str]
     completed_tasks: list[str]
+    created_at: str | None = None
+    started_at: str | None = None
+    completed_at: str | None = None
 
 
 class InvestigationListResponse(BaseModel):
@@ -112,13 +116,16 @@ class FullStateResponse(BaseModel):
     stage: str
     progress: float
     error: str | None = None
-    investigation_started_at: str
+    created_at: str | None = None
+    started_at: str | None = None
+    completed_at: str | None = None
     evidence: list[dict[str, Any]]
     findings: list[dict[str, Any]]
     hypotheses: list[dict[str, Any]]
     recommendations: list[dict[str, Any]]
     active_agents: list[str]
     completed_agents: list[str]
+    selected_agents: list[str] = []
     pending_tasks: list[str]
     completed_tasks: list[str]
     timeline: list[dict[str, Any]]

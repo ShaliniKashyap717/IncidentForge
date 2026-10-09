@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
@@ -49,7 +50,16 @@ class RepositoryAgent:
         scenario: dict[str, Any],
         use_llm: bool = True,
     ) -> Finding:
-        """Run repository/deployment analysis and update shared investigation state."""
+        """Run repository/deployment analysis and update shared investigation state (sync version)."""
+        return asyncio.run(self.investigate_async(state_manager, scenario, use_llm))
+
+    async def investigate_async(
+        self,
+        state_manager: InvestigationStateManager,
+        scenario: dict[str, Any],
+        use_llm: bool = True,
+    ) -> Finding:
+        """Run repository/deployment analysis asynchronously with observable steps."""
 
         state_manager.start_agent(self.name)
         state_manager.add_task("Analyze repository and deployment changes")
@@ -61,15 +71,35 @@ class RepositoryAgent:
             affected_services = incident.get("affected_services", []) if isinstance(incident, dict) else []
             reference_timestamp = infer_incident_reference_timestamp(scenario)
 
+            state_manager.timeline.add_event(
+                "tool_started",
+                "Analyzing recent commits for affected services",
+                self.name,
+            )
+            await asyncio.sleep(0.15)
             commits_result = analyze_repository_commits(
                 commits_payload=scenario.get("commits", {}),
                 affected_services=affected_services,
             )
+
+            state_manager.timeline.add_event(
+                "tool_started",
+                "Analyzing deployments near incident timestamp",
+                self.name,
+            )
+            await asyncio.sleep(0.15)
             deployments_result = analyze_repository_deployments(
                 deployments_payload=scenario.get("deployments", {}),
                 affected_services=affected_services,
                 reference_timestamp=reference_timestamp,
             )
+
+            state_manager.timeline.add_event(
+                "tool_started",
+                "Correlating commits with deployments",
+                self.name,
+            )
+            await asyncio.sleep(0.1)
             correlation_result = analyze_repository_change_correlation(commits_result, deployments_result)
 
             analysis_results = {
@@ -93,7 +123,7 @@ class RepositoryAgent:
             state_manager.complete_task("Analyze repository and deployment changes")
             state_manager.timeline.add_event(
                 "repository_analyzed",
-                "Repository commits and deployments were correlated against the incident timeline.",
+                f"Repository analysis: {len(evidence_pool)} evidence items, confidence {finding.confidence:.0%}",
                 self.name,
             )
             state_manager.finish_agent(self.name)

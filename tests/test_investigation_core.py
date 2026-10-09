@@ -9,7 +9,7 @@ from models.hypothesis import Hypothesis
 from models.recommendation import Recommendation
 
 from orchestrator.evidence_store import EvidenceStore
-from orchestrator.state_manager import InvestigationStateManager, InvestigationTimeline
+from orchestrator.state_manager import InvestigationStateManager, InvestigationTimeline, InvestigationStatus, InvestigationStage
 from orchestrator.recommendation_engine import (
     combine_findings,
     rank_recommendations,
@@ -198,8 +198,8 @@ class TestInvestigationStateManager:
 
     def test_initialization(self, state_manager, incident):
         assert state_manager.incident == incident
-        assert state_manager.status == "created"
-        assert state_manager.stage == "initialized"
+        assert state_manager.status == InvestigationStatus.QUEUED
+        assert state_manager.stage == InvestigationStage.QUEUED
         assert state_manager.progress == 0.0
         assert state_manager.evidence_store.count() == 0
         assert len(state_manager.findings) == 0
@@ -262,8 +262,8 @@ class TestInvestigationStateManager:
 
         summary = state_manager.get_status_summary()
         assert summary["incident_id"] == "INC-001"
-        assert summary["status"] == "created"
-        assert summary["stage"] == "initialized"
+        assert summary["status"] == InvestigationStatus.QUEUED.value
+        assert summary["stage"] == InvestigationStage.QUEUED.value
         assert summary["progress"] == 0.0
         assert summary["evidence_count"] == 0
         assert "Agent1" in summary["completed_agents"]
@@ -282,10 +282,10 @@ class TestInvestigationStateManager:
         assert "INC-001" in json_str
 
     def test_mark_complete(self, state_manager):
-        assert state_manager.status == "created"
+        assert state_manager.status == InvestigationStatus.QUEUED
         state_manager.mark_complete()
-        assert state_manager.status == "complete"
-        assert state_manager.stage == "completed"
+        assert state_manager.status == InvestigationStatus.COMPLETED
+        assert state_manager.stage == InvestigationStage.COMPLETED
         assert state_manager.progress == 100.0
 
 

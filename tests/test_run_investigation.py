@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from models.incident import Incident
-from orchestrator.state_manager import InvestigationStateManager
+from orchestrator.state_manager import InvestigationStateManager, InvestigationStatus
 from orchestrator.workflow import IncidentWorkflow
 from scripts.load_scenarios import load_scenario
 
@@ -227,7 +227,7 @@ def test_investigation_completes_without_errors(state_manager: InvestigationStat
     commander.investigate(state_manager, scenario, use_llm=False)
 
     # Status should be complete after synthesis
-    assert state_manager.status == "complete"
+    assert state_manager.status == InvestigationStatus.COMPLETED
 
     # No error events in timeline
     timeline = state_manager.timeline.get_events()
@@ -252,7 +252,7 @@ def test_investigation_has_findings_hypotheses_recommendations(
     assert len(state_manager.recommendations) > 0
 
     # Verify status is complete
-    assert state_manager.status == "complete"
+    assert state_manager.status == InvestigationStatus.COMPLETED
 
     # Verify agents are in completed_agents
     summary = state_manager.get_status_summary()
@@ -387,7 +387,7 @@ def test_final_status_is_complete(state_manager: InvestigationStateManager) -> N
 
     commander.investigate(state_manager, scenario, use_llm=False)
 
-    assert state_manager.status == "complete"
+    assert state_manager.status == InvestigationStatus.COMPLETED
 
 
 def test_timeline_records_repository_agent_activity(state_manager: InvestigationStateManager) -> None:

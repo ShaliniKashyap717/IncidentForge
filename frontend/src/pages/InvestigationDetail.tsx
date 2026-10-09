@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useInvestigation, useInvestigationState } from '../hooks/useInvestigations';
+import { useInvestigationStream } from '../hooks/useInvestigationStream';
 import { api } from '../api/client';
+import { FullInvestigationState, TimelineEvent } from '../types/api';
 
-const STAGE_ORDER = ['initialized', 'queued', 'running', 'analyzing', 'recommending', 'completed', 'failed'];
+const STAGE_ORDER = ['queued', 'triage', 'observability', 'repository', 'database', 'correlation', 'synthesis', 'recommendation', 'completed', 'failed'];
 
 function getStageIndex(stage: string) {
   return STAGE_ORDER.indexOf(stage);
@@ -20,15 +22,23 @@ function formatTime(timestamp: string) {
 
 function getStatusBadge(status: string) {
   const badges: Record<string, string> = {
-    created: 'badge-created',
     queued: 'badge-queued',
     running: 'badge-running',
     analyzing: 'badge-analyzing',
-    recommending: 'badge-recommending',
+    synthesizing: 'badge-synthesizing',
     completed: 'badge-completed',
     failed: 'badge-failed',
   };
   return badges[status] || '';
+}
+
+function formatDuration(startedAt: string | null, completedAt: string | null) {
+  if (!startedAt) return 'N/A';
+  const start = new Date(startedAt).getTime();
+  const end = completedAt ? new Date(completedAt).getTime() : Date.now();
+  const diffMs = end - start;
+  if (diffMs < 1000) return `${diffMs}ms`;
+  return `${(diffMs / 1000).toFixed(1)}s`;
 }
 
 function CollapsibleSection({ title, expanded, onToggle, children }: { title: string; expanded: boolean; onToggle: () => void; children: React.ReactNode }) {
@@ -50,7 +60,7 @@ export function InvestigationDetail() {
   const { investigationId } = useParams<{ investigationId: string }>();
   const navigate = useNavigate();
   const { investigation, loading, error, refetch } = useInvestigation(investigationId || null);
-  const { state, loading: _stateLoading, refetch: refetchState } = useInvestigationState(investigationId || null);
+  const { state, loading: stateLoading, refetch: refetchState } = useInvestigationState(investigationId || null);
 
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     timeline: true,
@@ -64,7 +74,43 @@ export function InvestigationDetail() {
     setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
   };
 
-  const [_streamError, _setStreamError] = useState<string | null>(null);
+  const [streamError, setStreamError] = useState<string | null>(null);
+  const [connected, setConnected] = useState(false);
+
+  // Track if we've already received initial state from SSE to avoid refetch loops
+  const hasReceivedInitialState = useRef(false);
+
+  const handleSSEEvent = useCallback((_: TimelineEvent) => {
+    // SSE events are handled by updating state via onStateChange
+  }, []);
+
+  const handleSSEStateChange = useCallback((_: FullInvestigationState) => {
+    // Only refetch if we haven't received initial state yet
+    // After that, the SSE events should be sufficient
+    if (!hasReceivedInitialState.current) {
+      hasReceivedInitialState.current = true;
+      // Don't refetch - the SSE state is already complete
+    }
+  }, []);
+
+  const handleSSEComplete = useCallback((_: FullInvestigationState) => {
+    // Investigation complete - could refetch once to ensure we have latest
+    refetchState();
+  }, [refetchState]);
+
+  const handleSSEError = useCallback((err: Error) => {
+    setStreamError(err.message);
+    setConnected(false);
+  }, []);
+
+  // Use SSE for live updates
+  useInvestigationStream({
+    investigationId: investigationId || null,
+    onEvent: handleSSEEvent,
+    onStateChange: handleSSEStateChange,
+    onComplete: handleSSEComplete,
+    onError: handleSSEError,
+  });
 
   const handleApprove = async (index: number) => {
     const note = prompt('Approval note (optional):');
@@ -90,7 +136,7 @@ export function InvestigationDetail() {
     return <div className="container">Invalid investigation ID</div>;
   }
 
-  if (loading) {
+  if (loading || stateLoading) {
     return (
       <div className="container" style={{ textAlign: 'center', padding: 'var(--spacing-xl)' }}>
         Loading investigation...
@@ -114,7 +160,7 @@ export function InvestigationDetail() {
 
   const currentInvestigation = investigation!;
   const currentState = state || currentInvestigation as any;
-  const currentStage = currentState.stage || 'initialized';
+  const currentStage = currentState.stage || 'queued';
 
   return (
     <div className="container">
@@ -166,6 +212,7 @@ export function InvestigationDetail() {
               <span>Status: <strong>{currentInvestigation.status}</strong></span>
               <span>Stage: <strong>{currentStage}</strong></span>
               <span>Progress: <strong>{currentInvestigation.progress.toFixed(0)}%</strong></span>
+              <span>Duration: <strong>{formatDuration(currentInvestigation.started_at, currentInvestigation.completed_at)}</strong></span>
             </div>
           </div>
 
@@ -182,9 +229,14 @@ export function InvestigationDetail() {
                   {expandedSections.timeline ? ' ▼' : ' ▶'}
                 </button>
               </h3>
-              {_streamError && (
-                <span className="badge badge-failed">SSE disconnected - polling fallback</span>
-              )}
+              <div style={{ display: 'flex', gap: 'var(--spacing-sm)', alignItems: 'center' }}>
+                <span className={`badge ${connected ? 'badge-running' : 'badge-failed'}`}>
+                  {connected ? '🔴 Live' : '⚫ Disconnected'}
+                </span>
+                {streamError && (
+                  <span className="badge badge-failed">SSE Error</span>
+                )}
+              </div>
             </div>
             {expandedSections.timeline && (
               <div className="event-feed">
@@ -219,7 +271,7 @@ export function InvestigationDetail() {
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: 'var(--color-text-secondary)' }}>Stage</span>
-                <span>{currentState.stage || 'initialized'}</span>
+                <span>{currentState.stage || 'queued'}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: 'var(--color-text-secondary)' }}>Progress</span>
@@ -227,6 +279,22 @@ export function InvestigationDetail() {
               </div>
               <div className="progress-bar" style={{ marginTop: 'var(--spacing-xs)' }}>
                 <div className="progress-fill" style={{ width: `${currentInvestigation.progress}%` }}></div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                <span style={{ color: 'var(--color-text-secondary)' }}>Created</span>
+                <span>{currentInvestigation.created_at ? formatTime(currentInvestigation.created_at) : 'N/A'}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                <span style={{ color: 'var(--color-text-secondary)' }}>Started</span>
+                <span>{currentInvestigation.started_at ? formatTime(currentInvestigation.started_at) : 'N/A'}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                <span style={{ color: 'var(--color-text-secondary)' }}>Completed</span>
+                <span>{currentInvestigation.completed_at ? formatTime(currentInvestigation.completed_at) : 'N/A'}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                <span style={{ color: 'var(--color-text-secondary)' }}>Duration</span>
+                <span>{formatDuration(currentInvestigation.started_at, currentInvestigation.completed_at)}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
                 <span style={{ color: 'var(--color-text-secondary)' }}>Evidence</span>

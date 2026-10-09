@@ -22,6 +22,9 @@ export interface InvestigationSummary {
   completed_agents: string[];
   pending_tasks: string[];
   completed_tasks: string[];
+  created_at: string | null;
+  started_at: string | null;
+  completed_at: string | null;
 }
 
 export interface InvestigationListResponse {
@@ -34,7 +37,9 @@ export interface FullInvestigationState {
   stage: string;
   progress: number;
   error: string | null;
-  investigation_started_at: string;
+  created_at: string | null;
+  started_at: string | null;
+  completed_at: string | null;
   evidence: Evidence[];
   findings: Finding[];
   hypotheses: Hypothesis[];

@@ -50,8 +50,12 @@ def _to_summary_response(investigation_id: str, state_manager) -> InvestigationS
         recommendations_count=summary["recommendations_count"],
         active_agents=summary["active_agents"],
         completed_agents=summary["completed_agents"],
+        selected_agents=summary.get("selected_agents", []),
         pending_tasks=summary["pending_tasks"],
         completed_tasks=summary["completed_tasks"],
+        created_at=summary.get("created_at"),
+        started_at=summary.get("started_at"),
+        completed_at=summary.get("completed_at"),
     )
 
 
@@ -379,6 +383,8 @@ async def stream_investigation(
     state_store: InvestigationStateStore = Depends(get_state_store_instance),
 ) -> StreamingResponse:
     """Stream investigation updates via Server-Sent Events (SSE)."""
+    from orchestrator.state_manager import InvestigationStatus
+
     state_manager = state_store.get(investigation_id)
     if state_manager is None:
         raise HTTPException(
@@ -391,9 +397,18 @@ async def stream_investigation(
         import asyncio
 
         last_event_index = 0
+        sent_initial_state = False
+        terminal_states = {InvestigationStatus.COMPLETED.value, InvestigationStatus.FAILED.value}
 
-        # Send initial state
+        # Send initial state immediately
         yield f"data: {json.dumps({'type': 'state', 'data': state_manager.export_state()})}\n\n"
+        sent_initial_state = True
+
+        # Check if already in terminal state
+        current_status = state_manager.status.value if hasattr(state_manager.status, 'value') else state_manager.status
+        if current_status in terminal_states:
+            yield f"data: {json.dumps({'type': 'complete', 'data': state_manager.export_state()})}\n\n"
+            return
 
         # Stream new events as they arrive
         while True:
@@ -404,8 +419,9 @@ async def stream_investigation(
                 yield f"data: {json.dumps({'type': 'event', 'data': event})}\n\n"
             last_event_index = len(events)
 
-            # Stop streaming if investigation is complete or failed
-            if state_manager.status in ("complete", "failed"):
+            # Check terminal state
+            current_status = state_manager.status.value if hasattr(state_manager.status, 'value') else state_manager.status
+            if current_status in terminal_states:
                 yield f"data: {json.dumps({'type': 'complete', 'data': state_manager.export_state()})}\n\n"
                 break
 

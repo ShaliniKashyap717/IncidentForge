@@ -53,8 +53,10 @@ def test_create_investigation() -> None:
     data = response.json()
     assert "investigation_id" in data
     assert data["incident_id"] == "INC-TEST-001"
-    # Background investigation returns immediately with created status
-    assert data["status"] == "created"
+    # Background investigation returns immediately with queued status
+    assert data["status"] == "queued"
+    assert data["stage"] == "queued"
+    assert data["progress"] == 0.0
     assert data["evidence_count"] >= 0
     assert data["findings_count"] >= 0
     assert data["recommendations_count"] >= 0
@@ -92,12 +94,12 @@ def test_get_investigation() -> None:
     assert create_response.status_code == 201
     investigation_id = create_response.json()["investigation_id"]
 
-    # Get the investigation
+    # Get the investigation (after background completion)
     response = client.get(f"/api/v1/investigations/{investigation_id}")
     assert response.status_code == 200
     data = response.json()
     assert data["incident_id"] == "INC-TEST-001"
-    assert data["status"] == "complete"
+    assert data["status"] == "completed"
 
 
 def test_get_investigation_state() -> None:
@@ -426,8 +428,8 @@ def test_create_investigation_with_scenario_payment_latency() -> None:
     assert "investigation_id" in data
     assert data["incident_id"] == "INC-2026-1042"
     assert data["incident_title"] == "Payment API latency spike"
-    # Background investigation returns immediately with created status
-    assert data["status"] == "created"
+    # Background investigation returns immediately with queued status
+    assert data["status"] == "queued"
     assert data["stage"] == "queued"
     assert data["progress"] == 0.0
     # Evidence/findings will be 0 initially, populated after completion
@@ -448,8 +450,8 @@ def test_create_investigation_with_scenario_db_lock_contention() -> None:
     assert "investigation_id" in data
     assert data["incident_id"] == "INC-2026-1055"
     assert data["incident_title"] == "Database lock contention on payments table"
-    # Background investigation returns immediately with created status
-    assert data["status"] == "created"
+    # Background investigation returns immediately with queued status
+    assert data["status"] == "queued"
     assert data["stage"] == "queued"
     assert data["progress"] == 0.0
     # Evidence/findings will be 0 initially, populated after completion
@@ -578,8 +580,8 @@ def test_investigation_completes_after_creation() -> None:
     assert response.status_code == 201
     investigation_id = response.json()["investigation_id"]
 
-    # Initial status should be created
-    assert response.json()["status"] == "created"
+    # Initial status should be queued
+    assert response.json()["status"] == "queued"
 
     # Poll until complete
     import time
@@ -587,11 +589,11 @@ def test_investigation_completes_after_creation() -> None:
         state_response = client.get(f"/api/v1/investigations/{investigation_id}/state")
         assert state_response.status_code == 200
         state = state_response.json()
-        if state["status"] == "complete":
+        if state["status"] == "completed":
             break
         time.sleep(0.1)
 
-    assert state["status"] == "complete"
+    assert state["status"] == "completed"
     assert state["stage"] == "completed"
     assert state["progress"] == 100.0
     assert len(state["evidence"]) > 0

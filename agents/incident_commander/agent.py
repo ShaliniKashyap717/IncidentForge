@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
@@ -22,7 +23,7 @@ from models.finding import Finding
 from models.hypothesis import Hypothesis
 from models.recommendation import Recommendation
 from models.state import IncidentState
-from orchestrator.state_manager import InvestigationStateManager
+from orchestrator.state_manager import InvestigationStateManager, InvestigationStage
 
 
 class IncidentCommander:
@@ -62,7 +63,7 @@ class IncidentCommander:
         scenario: dict[str, Any],
         use_llm: bool = True,
     ) -> list[Finding]:
-        """Run the full investigation coordination.
+        """Run the full investigation coordination synchronously (backward compatibility).
 
         This method:
         1. Performs initial triage to select specialist agents
@@ -85,67 +86,65 @@ class IncidentCommander:
         all_findings: list[Finding] = []
 
         try:
+            # Stage: Triage
+            state_manager.set_stage(InvestigationStage.TRIAGE, 10.0)
             selected_agents = self._triage(state_manager, scenario, use_llm)
+            state_manager.set_selected_agents(selected_agents)
 
-            for agent_name in selected_agents:
-                if agent_name == "observability":
-                    finding = self._invoke_observability_agent(
-                        state_manager,
-                        scenario,
-                        use_llm,
-                    )
-                    all_findings.append(finding)
+            # Stage: Observability Analysis
+            if "observability" in selected_agents:
+                state_manager.set_stage(InvestigationStage.OBSERVABILITY, 25.0)
+                finding = self._invoke_observability_agent(state_manager, scenario, use_llm)
+                all_findings.append(finding)
+                state_manager.timeline.add_event(
+                    "finding_received",
+                    f"Received finding from {finding.agent}: {finding.summary[:80]}",
+                    self.name,
+                )
 
-                    state_manager.timeline.add_event(
-                        "finding_received",
-                        f"Received finding from {finding.agent}: {finding.summary[:80]}",
-                        self.name,
-                    )
-                elif agent_name == "repository":
-                    finding = self._invoke_repository_agent(
-                        state_manager,
-                        scenario,
-                        use_llm,
-                    )
-                    all_findings.append(finding)
+            # Stage: Repository Analysis
+            if "repository" in selected_agents:
+                state_manager.set_stage(InvestigationStage.REPOSITORY, 45.0)
+                finding = self._invoke_repository_agent(state_manager, scenario, use_llm)
+                all_findings.append(finding)
+                state_manager.timeline.add_event(
+                    "finding_received",
+                    f"Received finding from {finding.agent}: {finding.summary[:80]}",
+                    self.name,
+                )
 
-                    state_manager.timeline.add_event(
-                        "finding_received",
-                        f"Received finding from {finding.agent}: {finding.summary[:80]}",
-                        self.name,
-                    )
-                elif agent_name == "database":
-                    finding = self._invoke_database_agent(
-                        state_manager,
-                        scenario,
-                        use_llm,
-                    )
-                    all_findings.append(finding)
+            # Stage: Database Analysis
+            if "database" in selected_agents:
+                state_manager.set_stage(InvestigationStage.DATABASE, 65.0)
+                finding = self._invoke_database_agent(state_manager, scenario, use_llm)
+                all_findings.append(finding)
+                state_manager.timeline.add_event(
+                    "finding_received",
+                    f"Received finding from {finding.agent}: {finding.summary[:80]}",
+                    self.name,
+                )
 
-                    state_manager.timeline.add_event(
-                        "finding_received",
-                        f"Received finding from {finding.agent}: {finding.summary[:80]}",
-                        self.name,
-                    )
-                else:
-                    state_manager.timeline.add_event(
-                        "agent_skipped",
-                        f"Agent {agent_name} not yet implemented",
-                        self.name,
-                    )
-
+            # Stage: Correlation
             if all_findings:
+                state_manager.set_stage(InvestigationStage.CORRELATION, 75.0)
                 if use_llm and has_google_api_key():
                     self._synthesize_findings(state_manager, scenario, all_findings, use_llm)
                 else:
                     self._synthesize_findings_deterministic(state_manager, scenario, all_findings)
 
-                state_manager.mark_complete()
-                state_manager.timeline.add_event(
-                    "investigation_completed",
-                    "Investigation concluded with synthesized hypotheses and recommendations",
-                    self.name,
-                )
+            # Stage: Synthesis
+            if all_findings:
+                state_manager.set_stage(InvestigationStage.SYNTHESIS, 85.0)
+
+            # Stage: Recommendation
+            state_manager.set_stage(InvestigationStage.RECOMMENDATION, 95.0)
+
+            state_manager.mark_complete()
+            state_manager.timeline.add_event(
+                "investigation_completed",
+                "Investigation concluded with synthesized hypotheses and recommendations",
+                self.name,
+            )
 
             state_manager.complete_task("Coordinate incident investigation")
             state_manager.timeline.add_event(
@@ -163,9 +162,278 @@ class IncidentCommander:
                 f"Incident Commander coordination failed: {exc}",
                 self.name,
             )
+            state_manager.mark_failed(str(exc))
             state_manager.complete_task("Coordinate incident investigation")
             state_manager.finish_agent(self.name)
             return all_findings
+
+    async def investigate_async(
+        self,
+        state_manager: InvestigationStateManager,
+        scenario: dict[str, Any],
+        use_llm: bool = True,
+    ) -> list[Finding]:
+        """Run the full investigation coordination asynchronously with observable stages.
+
+        This method:
+        1. Performs initial triage to select specialist agents
+        2. Invokes each selected agent with appropriate context (with realistic delays)
+        3. Collects findings from all agents
+        4. Performs cross-agent correlation and hypothesis synthesis
+        5. Generates recommendations
+
+        Args:
+            state_manager: Shared investigation state manager.
+            scenario: Full scenario data including incident and telemetry.
+            use_llm: Whether to use LLM for coordination decisions.
+
+        Returns:
+            List of all findings produced by specialist agents.
+        """
+
+        state_manager.start_agent(self.name)
+        state_manager.add_task("Coordinate incident investigation")
+
+        all_findings: list[Finding] = []
+        selected_agents: list[str] = []
+
+        try:
+            # Stage: Triage
+            state_manager.set_stage(InvestigationStage.TRIAGE, 10.0)
+            await asyncio.sleep(0.3)  # Realistic delay for triage
+            selected_agents = self._triage(state_manager, scenario, use_llm)
+            state_manager.set_selected_agents(selected_agents)
+            state_manager.timeline.add_event(
+                "commander_triage_complete",
+                f"Triage complete. Selected agents: {', '.join(selected_agents)}",
+                self.name,
+            )
+
+            # Stage: Observability Analysis
+            if "observability" in selected_agents:
+                state_manager.set_stage(InvestigationStage.OBSERVABILITY, 20.0)
+                finding = await self._invoke_observability_agent_async(state_manager, scenario, use_llm)
+                all_findings.append(finding)
+                state_manager.timeline.add_event(
+                    "finding_received",
+                    f"Observability Agent: {finding.summary[:100]}",
+                    "Observability Agent",
+                )
+                await asyncio.sleep(0.4)  # Delay between agents
+
+            # Stage: Repository Analysis
+            if "repository" in selected_agents:
+                state_manager.set_stage(InvestigationStage.REPOSITORY, 40.0)
+                finding = await self._invoke_repository_agent_async(state_manager, scenario, use_llm)
+                all_findings.append(finding)
+                state_manager.timeline.add_event(
+                    "finding_received",
+                    f"Repository Agent: {finding.summary[:100]}",
+                    "Repository Agent",
+                )
+                await asyncio.sleep(0.4)
+
+            # Stage: Database Analysis
+            if "database" in selected_agents:
+                state_manager.set_stage(InvestigationStage.DATABASE, 60.0)
+                finding = await self._invoke_database_agent_async(state_manager, scenario, use_llm)
+                all_findings.append(finding)
+                state_manager.timeline.add_event(
+                    "finding_received",
+                    f"Database Agent: {finding.summary[:100]}",
+                    "Database Agent",
+                )
+                await asyncio.sleep(0.4)
+
+            # Stage: Cross-Agent Correlation
+            if all_findings:
+                state_manager.set_stage(InvestigationStage.CORRELATION, 75.0)
+                await self._correlate_findings_async(state_manager, scenario, all_findings, use_llm)
+                await asyncio.sleep(0.3)
+
+            # Stage: Synthesis
+            if all_findings:
+                state_manager.set_stage(InvestigationStage.SYNTHESIS, 85.0)
+                await asyncio.sleep(0.2)
+
+            # Stage: Recommendation
+            state_manager.set_stage(InvestigationStage.RECOMMENDATION, 95.0)
+            await asyncio.sleep(0.2)
+
+            state_manager.mark_complete()
+            state_manager.timeline.add_event(
+                "investigation_completed",
+                "Investigation concluded with synthesized hypotheses and recommendations",
+                self.name,
+            )
+
+            state_manager.complete_task("Coordinate incident investigation")
+            state_manager.timeline.add_event(
+                "investigation_coordinated",
+                f"Coordinated {len(all_findings)} specialist agent(s)",
+                self.name,
+            )
+            state_manager.finish_agent(self.name)
+
+            return all_findings
+
+        except (RuntimeError, ValueError, KeyError, TypeError) as exc:
+            state_manager.timeline.add_event(
+                "commander_error",
+                f"Incident Commander coordination failed: {exc}",
+                self.name,
+            )
+            state_manager.mark_failed(str(exc))
+            state_manager.complete_task("Coordinate incident investigation")
+            state_manager.finish_agent(self.name)
+            return all_findings
+
+    async def _invoke_observability_agent_async(
+        self,
+        state_manager: InvestigationStateManager,
+        scenario: dict[str, Any],
+        use_llm: bool,
+    ) -> Finding:
+        """Invoke the Observability Agent asynchronously."""
+        state_manager.timeline.add_event(
+            "agent_invoked",
+            "Invoking Observability Agent for telemetry analysis",
+            self.name,
+        )
+
+        finding = await self.observability_agent.investigate_async(state_manager, scenario, use_llm)
+
+        state_manager.timeline.add_event(
+            "agent_completed",
+            f"Observability Agent completed: {finding.summary[:80]}",
+            self.name,
+        )
+
+        return finding
+
+    async def _invoke_repository_agent_async(
+        self,
+        state_manager: InvestigationStateManager,
+        scenario: dict[str, Any],
+        use_llm: bool,
+    ) -> Finding:
+        """Invoke the Repository Agent asynchronously."""
+        state_manager.timeline.add_event(
+            "agent_invoked",
+            "Invoking Repository Agent for code and deployment analysis",
+            self.name,
+        )
+
+        finding = await self.repository_agent.investigate_async(state_manager, scenario, use_llm)
+
+        state_manager.timeline.add_event(
+            "agent_completed",
+            f"Repository Agent completed: {finding.summary[:80]}",
+            self.name,
+        )
+
+        return finding
+
+    async def _invoke_database_agent_async(
+        self,
+        state_manager: InvestigationStateManager,
+        scenario: dict[str, Any],
+        use_llm: bool,
+    ) -> Finding:
+        """Invoke the Database Agent asynchronously."""
+        state_manager.timeline.add_event(
+            "agent_invoked",
+            "Invoking Database Agent for database behavior analysis",
+            self.name,
+        )
+
+        finding = await self.database_agent.investigate_async(state_manager, scenario, use_llm)
+
+        state_manager.timeline.add_event(
+            "agent_completed",
+            f"Database Agent completed: {finding.summary[:80]}",
+            self.name,
+        )
+
+        return finding
+
+    async def _correlate_findings_async(
+        self,
+        state_manager: InvestigationStateManager,
+        scenario: dict[str, Any],
+        findings: list[Finding],
+        use_llm: bool,
+    ) -> None:
+        """Perform cross-agent correlation and hypothesis synthesis."""
+        state_manager.timeline.add_event(
+            "correlation_started",
+            "Cross-agent correlation initiated",
+            self.name,
+        )
+
+        # Detect agreements and disagreements between agent findings
+        self._detect_agent_agreements(state_manager, findings)
+        self._detect_agent_disagreements(state_manager, findings)
+
+        # Synthesize findings into hypotheses
+        if use_llm and has_google_api_key():
+            self._synthesize_findings(state_manager, scenario, findings, use_llm)
+        else:
+            self._synthesize_findings_deterministic(state_manager, scenario, findings)
+
+        state_manager.timeline.add_event(
+            "correlation_completed",
+            f"Correlation complete: {len(state_manager.hypotheses)} hypotheses synthesized",
+            self.name,
+        )
+
+    def _detect_agent_agreements(
+        self,
+        state_manager: InvestigationStateManager,
+        findings: list[Finding],
+    ) -> None:
+        """Detect and record agreements between agent hypotheses."""
+        if len(findings) < 2:
+            return
+
+        # Simple heuristic: check for word overlap in hypotheses
+        for i, f1 in enumerate(findings):
+            for f2 in findings[i + 1 :]:
+                words1 = set(f1.hypothesis.lower().split())
+                words2 = set(f2.hypothesis.lower().split())
+                if not words1 or not words2:
+                    continue
+                overlap = len(words1 & words2) / max(len(words1), len(words2))
+                if overlap >= 0.3:
+                    state_manager.timeline.add_event(
+                        "agent_agreement",
+                        f"{f1.agent} and {f2.agent} hypotheses align (overlap: {overlap:.0%})",
+                        self.name,
+                    )
+
+    def _detect_agent_disagreements(
+        self,
+        state_manager: InvestigationStateManager,
+        findings: list[Finding],
+    ) -> None:
+        """Detect and record disagreements between agent hypotheses."""
+        if len(findings) < 2:
+            return
+
+        for i, f1 in enumerate(findings):
+            for f2 in findings[i + 1 :]:
+                words1 = set(f1.hypothesis.lower().split())
+                words2 = set(f2.hypothesis.lower().split())
+                if not words1 or not words2:
+                    continue
+                overlap = len(words1 & words2) / max(len(words1), len(words2))
+                if overlap < 0.15:
+                    state_manager.timeline.add_event(
+                        "agent_disagreement",
+                        f"{f1.agent} and {f2.agent} hypotheses diverge: "
+                        f"'{f1.hypothesis[:60]}...' vs '{f2.hypothesis[:60]}...'",
+                        self.name,
+                    )
 
     def _triage(
         self,

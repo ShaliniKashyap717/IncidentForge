@@ -7,7 +7,7 @@ from typing import Any
 
 from agents.incident_commander.agent import IncidentCommander, create_incident_commander
 from models.incident import Incident
-from orchestrator.state_manager import InvestigationStateManager
+from orchestrator.state_manager import InvestigationStateManager, InvestigationStage
 
 
 class IncidentWorkflow:
@@ -41,12 +41,7 @@ class IncidentWorkflow:
         """
 
         state_manager = InvestigationStateManager(incident)
-
-        state_manager.timeline.add_event(
-            "investigation_started",
-            f"Investigation started for {incident.id}",
-            "Incident Commander",
-        )
+        state_manager.start_investigation()
 
         # Use the Incident Commander to coordinate the investigation
         self.commander.investigate(state_manager, context, use_llm=use_llm)
@@ -74,7 +69,7 @@ class IncidentWorkflow:
 
         investigation_id = str(uuid.uuid4())
         state_manager = InvestigationStateManager(incident)
-        state_manager.set_stage("queued", 0.0)
+        state_manager.set_stage(InvestigationStage.QUEUED, 0.0)
 
         # Store the state manager immediately so it can be polled
         # The actual investigation will be started as a background task
@@ -89,22 +84,16 @@ class IncidentWorkflow:
         context: dict[str, Any],
         use_llm: bool,
     ) -> None:
-        """Run the investigation in the background."""
+        """Run the investigation in the background with observable async stages."""
         try:
-            state_manager.set_stage("running", 10.0)
-
-            state_manager.timeline.add_event(
-                "investigation_started",
-                f"Investigation started for {state_manager.incident.id}",
-                "Incident Commander",
-            )
+            state_manager.start_investigation()
 
             # Use the Incident Commander to coordinate the investigation
-            self.commander.investigate(state_manager, context, use_llm=use_llm)
+            await self.commander.investigate_async(state_manager, context, use_llm=use_llm)
 
             # mark_complete is called by the commander, but ensure stage is updated
-            if state_manager.status == "complete":
-                state_manager.set_stage("completed", 100.0)
+            if state_manager.status.value == "completed":
+                state_manager.set_stage(InvestigationStage.COMPLETED, 100.0)
 
         except Exception as exc:
             state_manager.mark_failed(str(exc))

@@ -39,22 +39,8 @@ class InvestigationStateStore:
     def list_summaries(self) -> list[dict[str, Any]]:
         """List summaries of all investigations."""
         return [
-            {
-                "investigation_id": inv_id,
-                "incident_id": state_manager.incident.id,
-                "incident_title": state_manager.incident.title,
-                "status": state_manager.status,
-                "stage": state_manager.stage,
-                "progress": state_manager.progress,
-                "error": state_manager.error,
-                "evidence_count": state_manager.evidence_store.count(),
-                "findings_count": len(state_manager.findings),
-                "recommendations_count": len(state_manager.recommendations),
-                "active_agents": list(state_manager.active_agents),
-                "completed_agents": list(state_manager.completed_agents),
-                "pending_tasks": state_manager.pending_tasks,
-                "completed_tasks": state_manager.completed_tasks,
-            }
+            state_manager.get_status_summary()
+            | {"investigation_id": inv_id}
             for inv_id, state_manager in self._store.items()
         ]
 

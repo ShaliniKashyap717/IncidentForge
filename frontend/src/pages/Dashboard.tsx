@@ -5,17 +5,16 @@ import { InvestigationSummary } from '../types/api';
 export function Dashboard() {
   const { investigations, loading, error, refetch } = useInvestigations();
 
-  const running = investigations.filter(i => i.status === 'running' || i.status === 'queued').length;
+  const running = investigations.filter(i => i.status === 'running' || i.status === 'queued' || i.status === 'analyzing' || i.status === 'synthesizing').length;
   const completed = investigations.filter(i => i.status === 'completed').length;
   const failed = investigations.filter(i => i.status === 'failed').length;
 
   const getStatusBadge = (status: string) => {
     const badges: Record<string, string> = {
-      created: 'badge-created',
       queued: 'badge-queued',
       running: 'badge-running',
       analyzing: 'badge-analyzing',
-      recommending: 'badge-recommending',
+      synthesizing: 'badge-synthesizing',
       completed: 'badge-completed',
       failed: 'badge-failed',
     };
@@ -89,12 +88,12 @@ export function Dashboard() {
                 <th>Progress</th>
                 <th>Agents</th>
                 <th>Created</th>
+                <th>Duration</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
               {investigations.slice().sort((a, b) => {
-                // Sort by investigation_id descending (newest first)
                 return b.investigation_id.localeCompare(a.investigation_id);
               }).map((inv: InvestigationSummary) => (
                 <tr key={inv.investigation_id} style={{ cursor: 'pointer' }}>
@@ -113,7 +112,14 @@ export function Dashboard() {
                     <small>{inv.progress.toFixed(0)}%</small>
                   </td>
                   <td>{inv.completed_agents.length} / {inv.completed_agents.length + inv.active_agents.length}</td>
-                  <td>{formatDistanceToNow(new Date(inv.investigation_id.slice(0, 12) + '000000000000'.slice(0, 12)), { addSuffix: true })}</td>
+                  <td>{inv.created_at ? formatDistanceToNow(new Date(inv.created_at), { addSuffix: true }) : 'N/A'}</td>
+                  <td>
+                    {inv.completed_at && inv.started_at 
+                      ? `${((new Date(inv.completed_at).getTime() - new Date(inv.started_at).getTime()) / 1000).toFixed(1)}s`
+                      : inv.started_at
+                        ? `${((Date.now() - new Date(inv.started_at).getTime()) / 1000).toFixed(1)}s (running)`
+                        : 'N/A'}
+                  </td>
                   <td style={{ textAlign: 'right' }}>
                     <a href={`/investigations/${inv.investigation_id}`} className="btn btn-secondary" style={{ fontSize: '12px', padding: '4px 8px' }}>
                       View
