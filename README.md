@@ -9,8 +9,15 @@ Rather than relying on a single agent to diagnose an incident, IncidentForge dec
 The Incident Commander correlates evidence, evaluates competing hypotheses, resolves conflicting findings, and produces a root-cause assessment and remediation recommendation.
 
 Built with **Python, Google ADK, Gemini, FastAPI, React, and TypeScript.**
+<img width="1470" height="829" alt="image" src="https://github.com/user-attachments/assets/a147fe46-40a8-43f1-b81f-313039829bb6" />
+<img width="998" height="555" alt="image" src="https://github.com/user-attachments/assets/91336120-97ec-4c69-bc6e-4c75cd0f584a" />
+<img width="988" height="532" alt="image" src="https://github.com/user-attachments/assets/82d5d42f-10f2-40d2-8337-ca07571c8f70" />
+<img width="1146" height="554" alt="image" src="https://github.com/user-attachments/assets/58c487dd-3910-48b7-a4d1-3606f60ba467" />
+<img width="1010" height="672" alt="image" src="https://github.com/user-attachments/assets/004178b7-8f72-4c49-964e-d6e27a9820f6" />
+
 
 ---
+
 
 ## Overview
 
