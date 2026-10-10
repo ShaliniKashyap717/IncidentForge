@@ -47,7 +47,17 @@ class DatabaseAgent:
 		use_llm: bool = True,
 	) -> Finding:
 		"""Run database analysis and update shared investigation state (sync version)."""
-		return asyncio.run(self.investigate_async(state_manager, scenario, use_llm))
+		try:
+			loop = asyncio.get_running_loop()
+			# If we're already in an event loop, we can't use asyncio.run
+			# Create a new task and run it
+			import concurrent.futures
+			with concurrent.futures.ThreadPoolExecutor() as executor:
+				future = executor.submit(asyncio.run, self.investigate_async(state_manager, scenario, use_llm))
+				return future.result()
+		except RuntimeError:
+			# No running loop, safe to use asyncio.run
+			return asyncio.run(self.investigate_async(state_manager, scenario, use_llm))
 
 	async def investigate_async(
 		self,

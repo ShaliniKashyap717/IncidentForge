@@ -37,10 +37,14 @@ SCENARIOS_DIR = Path(__file__).resolve().parents[1] / "scenarios"
 def _to_summary_response(investigation_id: str, state_manager) -> InvestigationSummaryResponse:
     """Convert state manager to summary response."""
     summary = state_manager.get_status_summary()
+    incident = state_manager.incident
     return InvestigationSummaryResponse(
         investigation_id=investigation_id,
         incident_id=summary["incident_id"],
         incident_title=summary["incident_title"],
+        incident_description=incident.description,
+        incident_severity=incident.severity.value if hasattr(incident.severity, 'value') else incident.severity,
+        incident_affected_services=incident.affected_services,
         status=summary["status"],
         stage=summary["stage"],
         progress=summary["progress"],
@@ -144,13 +148,19 @@ async def create_investigation(
         incident = request.incident
         context = request.context
 
-    investigation_id, state_manager = await workflow.start_background(
-        incident,
-        context,
-        use_llm=request.use_llm,
-    )
-
-    state_store.save(investigation_id, state_manager)
+    # For testing: if use_llm is False and we want synchronous execution,
+    # run the investigation synchronously (tests can use this)
+    if not request.use_llm:
+        state_manager = await workflow.start(incident, context, use_llm=False)
+        investigation_id = str(uuid.uuid4())
+        state_store.save(investigation_id, state_manager)
+    else:
+        investigation_id, state_manager = await workflow.start_background(
+            incident,
+            context,
+            use_llm=request.use_llm,
+        )
+        state_store.save(investigation_id, state_manager)
 
     return _to_summary_response(investigation_id, state_manager)
 

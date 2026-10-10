@@ -28,6 +28,9 @@ class InvestigationSummaryResponse(BaseModel):
     investigation_id: str
     incident_id: str
     incident_title: str
+    incident_description: str | None = None
+    incident_severity: str | None = None
+    incident_affected_services: list[str] | None = None
     status: str
     stage: str
     progress: float

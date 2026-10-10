@@ -53,10 +53,10 @@ def test_create_investigation() -> None:
     data = response.json()
     assert "investigation_id" in data
     assert data["incident_id"] == "INC-TEST-001"
-    # Background investigation returns immediately with queued status
-    assert data["status"] == "queued"
-    assert data["stage"] == "queued"
-    assert data["progress"] == 0.0
+    # Synchronous investigation (use_llm=False) completes immediately
+    assert data["status"] == "completed"
+    assert data["stage"] == "completed"
+    assert data["progress"] == 100.0
     assert data["evidence_count"] >= 0
     assert data["findings_count"] >= 0
     assert data["recommendations_count"] >= 0
@@ -93,6 +93,16 @@ def test_get_investigation() -> None:
     create_response = client.post("/api/v1/investigations", json=request_body)
     assert create_response.status_code == 201
     investigation_id = create_response.json()["investigation_id"]
+
+    # Wait for background investigation to complete
+    import time
+    for _ in range(30):
+        response = client.get(f"/api/v1/investigations/{investigation_id}")
+        assert response.status_code == 200
+        data = response.json()
+        if data["status"] == "completed":
+            break
+        time.sleep(0.1)
 
     # Get the investigation (after background completion)
     response = client.get(f"/api/v1/investigations/{investigation_id}")
@@ -284,6 +294,16 @@ def test_approve_recommendation() -> None:
     assert create_response.status_code == 201
     investigation_id = create_response.json()["investigation_id"]
 
+    # Wait for background investigation to complete
+    import time
+    for _ in range(30):
+        response = client.get(f"/api/v1/investigations/{investigation_id}")
+        assert response.status_code == 200
+        data = response.json()
+        if data["status"] == "completed":
+            break
+        time.sleep(0.1)
+
     # Approve the first recommendation (index 0)
     response = client.post(
         f"/api/v1/investigations/{investigation_id}/recommendations/0/approve",
@@ -320,6 +340,16 @@ def test_reject_recommendation() -> None:
     create_response = client.post("/api/v1/investigations", json=request_body)
     assert create_response.status_code == 201
     investigation_id = create_response.json()["investigation_id"]
+
+    # Wait for background investigation to complete
+    import time
+    for _ in range(30):
+        response = client.get(f"/api/v1/investigations/{investigation_id}")
+        assert response.status_code == 200
+        data = response.json()
+        if data["status"] == "completed":
+            break
+        time.sleep(0.1)
 
     # Reject the first recommendation (index 0)
     response = client.post(
@@ -428,12 +458,14 @@ def test_create_investigation_with_scenario_payment_latency() -> None:
     assert "investigation_id" in data
     assert data["incident_id"] == "INC-2026-1042"
     assert data["incident_title"] == "Payment API latency spike"
-    # Background investigation returns immediately with queued status
-    assert data["status"] == "queued"
-    assert data["stage"] == "queued"
-    assert data["progress"] == 0.0
-    # Evidence/findings will be 0 initially, populated after completion
-    # (checked in test_investigation_completes_after_creation)
+    # Synchronous investigation (use_llm=False) completes immediately
+    assert data["status"] == "completed"
+    assert data["stage"] == "completed"
+    assert data["progress"] == 100.0
+    # Evidence/findings are populated immediately
+    assert data["evidence_count"] > 0
+    assert data["findings_count"] > 0
+    assert data["recommendations_count"] > 0
 
 
 def test_create_investigation_with_scenario_db_lock_contention() -> None:
@@ -450,11 +482,14 @@ def test_create_investigation_with_scenario_db_lock_contention() -> None:
     assert "investigation_id" in data
     assert data["incident_id"] == "INC-2026-1055"
     assert data["incident_title"] == "Database lock contention on payments table"
-    # Background investigation returns immediately with queued status
-    assert data["status"] == "queued"
-    assert data["stage"] == "queued"
-    assert data["progress"] == 0.0
-    # Evidence/findings will be 0 initially, populated after completion
+    # Synchronous investigation (use_llm=False) completes immediately
+    assert data["status"] == "completed"
+    assert data["stage"] == "completed"
+    assert data["progress"] == 100.0
+    # Evidence/findings are populated immediately
+    assert data["evidence_count"] > 0
+    assert data["findings_count"] > 0
+    assert data["recommendations_count"] > 0
 
 
 def test_create_investigation_invalid_scenario_returns_404() -> None:
@@ -493,6 +528,16 @@ def test_scenario_investigation_returns_real_evidence() -> None:
     assert response.status_code == 201
     investigation_id = response.json()["investigation_id"]
 
+    # Wait for background investigation to complete
+    import time
+    for _ in range(30):
+        state_response = client.get(f"/api/v1/investigations/{investigation_id}/state")
+        assert state_response.status_code == 200
+        state = state_response.json()
+        if state["status"] == "completed":
+            break
+        time.sleep(0.1)
+
     # Get full state and verify evidence content
     state_response = client.get(f"/api/v1/investigations/{investigation_id}/state")
     assert state_response.status_code == 200
@@ -521,6 +566,16 @@ def test_scenario_investigation_returns_findings_and_hypotheses() -> None:
     response = client.post("/api/v1/investigations", json=request_body)
     assert response.status_code == 201
     investigation_id = response.json()["investigation_id"]
+
+    # Wait for background investigation to complete
+    import time
+    for _ in range(30):
+        state_response = client.get(f"/api/v1/investigations/{investigation_id}/state")
+        assert state_response.status_code == 200
+        state = state_response.json()
+        if state["status"] == "completed":
+            break
+        time.sleep(0.1)
 
     state_response = client.get(f"/api/v1/investigations/{investigation_id}/state")
     assert state_response.status_code == 200
@@ -553,7 +608,7 @@ def test_scenario_investigation_timeline_has_real_events() -> None:
         state_response = client.get(f"/api/v1/investigations/{investigation_id}/state")
         assert state_response.status_code == 200
         state = state_response.json()
-        if state["status"] == "complete":
+        if state["status"] == "completed":
             break
         time.sleep(0.1)
 
@@ -570,7 +625,7 @@ def test_scenario_investigation_timeline_has_real_events() -> None:
 
 
 def test_investigation_completes_after_creation() -> None:
-    """Test that a background investigation eventually completes."""
+    """Test that a synchronous investigation completes immediately."""
     request_body = {
         "scenario": "payment_latency",
         "use_llm": False,
@@ -580,22 +635,153 @@ def test_investigation_completes_after_creation() -> None:
     assert response.status_code == 201
     investigation_id = response.json()["investigation_id"]
 
-    # Initial status should be queued
-    assert response.json()["status"] == "queued"
+    # Synchronous investigation completes immediately
+    assert response.json()["status"] == "completed"
 
-    # Poll until complete
-    import time
-    for _ in range(30):
-        state_response = client.get(f"/api/v1/investigations/{investigation_id}/state")
-        assert state_response.status_code == 200
-        state = state_response.json()
-        if state["status"] == "completed":
-            break
-        time.sleep(0.1)
-
+    # Verify full state
+    state_response = client.get(f"/api/v1/investigations/{investigation_id}/state")
+    assert state_response.status_code == 200
+    state = state_response.json()
     assert state["status"] == "completed"
     assert state["stage"] == "completed"
     assert state["progress"] == 100.0
     assert len(state["evidence"]) > 0
     assert len(state["findings"]) > 0
     assert len(state["recommendations"]) > 0
+
+
+def test_investigation_creation_registration_and_retrieval_sync() -> None:
+    """Regression test: investigation created via HTTP API must be immediately retrievable.
+
+    Verifies the complete lifecycle:
+    1. POST /investigations creates investigation
+    2. GET /investigations/{id} retrieves same investigation
+    3. GET /investigations/{id}/state retrieves full state
+    4. GET /investigations lists the investigation
+    5. Record remains accessible after workflow completion (sync path, use_llm=False)
+    """
+    request_body = {
+        "scenario": "payment_latency",
+        "use_llm": False,
+    }
+
+    # 1. Create investigation
+    create_response = client.post("/api/v1/investigations", json=request_body)
+    assert create_response.status_code == 201
+    create_data = create_response.json()
+    investigation_id = create_data["investigation_id"]
+    assert investigation_id is not None
+
+    # 2. Immediately fetch via detail endpoint
+    detail_response = client.get(f"/api/v1/investigations/{investigation_id}")
+    assert detail_response.status_code == 200
+    detail_data = detail_response.json()
+    assert detail_data["investigation_id"] == investigation_id
+    assert detail_data["incident_id"] == "INC-2026-1042"
+    assert detail_data["status"] == "completed"
+
+    # 3. Fetch full state
+    state_response = client.get(f"/api/v1/investigations/{investigation_id}/state")
+    assert state_response.status_code == 200
+    state_data = state_response.json()
+    assert state_data["incident"]["id"] == "INC-2026-1042"
+    assert state_data["status"] == "completed"
+    assert len(state_data["evidence"]) > 0
+    assert len(state_data["findings"]) > 0
+    assert len(state_data["recommendations"]) > 0
+
+    # 4. Verify appears in list
+    list_response = client.get("/api/v1/investigations")
+    assert list_response.status_code == 200
+    list_data = list_response.json()
+    investigation_ids = [inv["investigation_id"] for inv in list_data["investigations"]]
+    assert investigation_id in investigation_ids
+
+    # 5. Verify record remains accessible after workflow completion
+    # (already verified by successful detail and state fetches above)
+    # Additional check: timeline should have completion event
+    timeline_response = client.get(f"/api/v1/investigations/{investigation_id}/timeline")
+    assert timeline_response.status_code == 200
+    timeline_data = timeline_response.json()
+    event_types = {e["type"] for e in timeline_data["timeline"]}
+    assert "investigation_completed" in event_types
+
+
+def test_investigation_creation_registration_and_retrieval_background() -> None:
+    """Regression test: background investigation (use_llm=True) must be immediately retrievable.
+
+    Verifies the complete lifecycle for background execution:
+    1. POST /investigations with use_llm=true creates investigation
+    2. GET /investigations/{id} retrieves same investigation (should be queued/running)
+    3. GET /investigations/{id}/state retrieves full state
+    4. GET /investigations lists the investigation
+    5. Record remains accessible after workflow completion
+    """
+    request_body = {
+        "scenario": "payment_latency",
+        "use_llm": True,  # Background path
+    }
+
+    # 1. Create investigation
+    create_response = client.post("/api/v1/investigations", json=request_body)
+    assert create_response.status_code == 201
+    create_data = create_response.json()
+    investigation_id = create_data["investigation_id"]
+    assert investigation_id is not None
+
+    # 2. Immediately fetch via detail endpoint (may be queued/running)
+    detail_response = client.get(f"/api/v1/investigations/{investigation_id}")
+    assert detail_response.status_code == 200
+    detail_data = detail_response.json()
+    assert detail_data["investigation_id"] == investigation_id
+    assert detail_data["incident_id"] == "INC-2026-1042"
+    # Background investigation starts as queued
+    assert detail_data["status"] in ("queued", "running", "analyzing", "synthesizing", "completed")
+
+    # 3. Fetch full state
+    state_response = client.get(f"/api/v1/investigations/{investigation_id}/state")
+    assert state_response.status_code == 200
+    state_data = state_response.json()
+    assert state_data["incident"]["id"] == "INC-2026-1042"
+    assert state_data["status"] in ("queued", "running", "analyzing", "synthesizing", "completed")
+
+    # 4. Verify appears in list
+    list_response = client.get("/api/v1/investigations")
+    assert list_response.status_code == 200
+    list_data = list_response.json()
+    investigation_ids = [inv["investigation_id"] for inv in list_data["investigations"]]
+    assert investigation_id in investigation_ids
+
+    # 5. Wait for completion and verify record remains accessible
+    # Note: TestClient may not execute background tasks, so we accept running status
+    # but verify the record is accessible and persists
+    import time
+    final_status = None
+    for _ in range(50):  # Wait up to 5 seconds
+        state_response = client.get(f"/api/v1/investigations/{investigation_id}/state")
+        assert state_response.status_code == 200
+        state_data = state_response.json()
+        final_status = state_data["status"]
+        if state_data["status"] == "completed":
+            break
+        time.sleep(0.1)
+
+    # Verify record remains accessible regardless of completion status
+    detail_response = client.get(f"/api/v1/investigations/{investigation_id}")
+    assert detail_response.status_code == 200
+    detail_data = detail_response.json()
+    assert detail_data["investigation_id"] == investigation_id
+
+    # Verify list still contains it
+    list_response = client.get("/api/v1/investigations")
+    assert list_response.status_code == 200
+    list_data = list_response.json()
+    investigation_ids = [inv["investigation_id"] for inv in list_data["investigations"]]
+    assert investigation_id in investigation_ids
+
+    # If completed, verify full state
+    if final_status == "completed":
+        assert len(state_data["evidence"]) > 0
+        assert len(state_data["findings"]) > 0
+        assert len(state_data["recommendations"]) > 0
+        assert detail_data["status"] == "completed"

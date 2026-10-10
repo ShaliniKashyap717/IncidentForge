@@ -11,6 +11,9 @@ export interface InvestigationSummary {
   investigation_id: string;
   incident_id: string;
   incident_title: string;
+  incident_description?: string;
+  incident_severity?: string;
+  incident_affected_services?: string[];
   status: string;
   stage: string;
   progress: number;
@@ -20,6 +23,7 @@ export interface InvestigationSummary {
   recommendations_count: number;
   active_agents: string[];
   completed_agents: string[];
+  selected_agents: string[];
   pending_tasks: string[];
   completed_tasks: string[];
   created_at: string | null;
@@ -46,6 +50,7 @@ export interface FullInvestigationState {
   recommendations: Recommendation[];
   active_agents: string[];
   completed_agents: string[];
+  selected_agents: string[];
   pending_tasks: string[];
   completed_tasks: string[];
   timeline: TimelineEvent[];

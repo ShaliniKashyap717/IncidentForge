@@ -21,10 +21,31 @@ export function Dashboard() {
     return badges[status] || '';
   };
 
+  const getStatusIndicator = (status: string) => {
+    const indicators: Record<string, string> = {
+      queued: 'status-indicator queued',
+      running: 'status-indicator running',
+      analyzing: 'status-indicator running',
+      synthesizing: 'status-indicator running',
+      completed: 'status-indicator completed',
+      failed: 'status-indicator failed',
+    };
+    return indicators[status] || '';
+  };
+
+  const formatDuration = (startedAt: string | null, completedAt: string | null) => {
+    if (!startedAt) return 'N/A';
+    const start = new Date(startedAt).getTime();
+    const end = completedAt ? new Date(completedAt).getTime() : Date.now();
+    const diffMs = end - start;
+    if (diffMs < 1000) return `${diffMs}ms`;
+    return `${(diffMs / 1000).toFixed(1)}s`;
+  };
+
   if (loading) {
     return (
       <div className="container">
-        <div style={{ textAlign: 'center', padding: 'var(--spacing-xl)' }}>Loading...</div>
+        <div style={{ textAlign: 'center', padding: 'var(--spacing-xl)', color: 'var(--color-text-muted)' }}>Loading...</div>
       </div>
     );
   }
@@ -32,10 +53,10 @@ export function Dashboard() {
   if (error) {
     return (
       <div className="container">
-        <div className="card" style={{ borderColor: 'var(--color-error)' }}>
-          <h3 style={{ color: 'var(--color-error)' }}>Error loading investigations</h3>
-          <p>{error}</p>
-          <button className="btn btn-primary" onClick={refetch} style={{ marginTop: 'var(--spacing-md)' }}>
+        <div className="error-banner">
+          <strong>Error loading investigations</strong>
+          <p style={{ marginTop: 'var(--spacing-xs)' }}>{error}</p>
+          <button className="btn btn-secondary" onClick={refetch} style={{ marginTop: 'var(--spacing-md)' }}>
             Retry
           </button>
         </div>
@@ -47,49 +68,52 @@ export function Dashboard() {
     <div className="container">
       <div className="page-header">
         <h1 className="page-title">Dashboard</h1>
-        <button className="btn btn-primary" onClick={refetch}>Refresh</button>
+        <button className="btn btn-secondary" onClick={refetch}>Refresh</button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 'var(--spacing-md)', marginBottom: 'var(--spacing-xl)' }}>
-        <div className="card">
-          <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', marginBottom: 'var(--spacing-xs)' }}>Total</div>
-          <div style={{ fontSize: '32px', fontWeight: '700' }}>{investigations.length}</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 'var(--spacing-md)', marginBottom: 'var(--spacing-xl)' }}>
+        <div className="card" style={{ padding: 'var(--spacing-lg) var(--spacing-md)' }}>
+          <div style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-muted)', marginBottom: 'var(--spacing-xs)' }}>Total</div>
+          <div style={{ fontSize: '28px', fontWeight: 400, letterSpacing: '-0.02em' }}>{investigations.length}</div>
         </div>
-        <div className="card">
-          <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', marginBottom: 'var(--spacing-xs)' }}>Running</div>
-          <div style={{ fontSize: '32px', fontWeight: '700', color: 'var(--color-accent)' }}>{running}</div>
+        <div className="card" style={{ padding: 'var(--spacing-lg) var(--spacing-md)' }}>
+          <div style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-muted)', marginBottom: 'var(--spacing-xs)' }}>Running</div>
+          <div style={{ fontSize: '28px', fontWeight: 400, letterSpacing: '-0.02em', color: 'var(--color-accent-olive)' }}>{running}</div>
         </div>
-        <div className="card">
-          <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', marginBottom: 'var(--spacing-xs)' }}>Completed</div>
-          <div style={{ fontSize: '32px', fontWeight: '700', color: 'var(--color-success)' }}>{completed}</div>
+        <div className="card" style={{ padding: 'var(--spacing-lg) var(--spacing-md)' }}>
+          <div style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-muted)', marginBottom: 'var(--spacing-xs)' }}>Completed</div>
+          <div style={{ fontSize: '28px', fontWeight: 400, letterSpacing: '-0.02em', color: 'var(--color-accent-green)' }}>{completed}</div>
         </div>
-        <div className="card">
-          <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', textTransform: 'uppercase', marginBottom: 'var(--spacing-xs)' }}>Failed</div>
-          <div style={{ fontSize: '32px', fontWeight: '700', color: 'var(--color-error)' }}>{failed}</div>
+        <div className="card" style={{ padding: 'var(--spacing-lg) var(--spacing-md)' }}>
+          <div style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-muted)', marginBottom: 'var(--spacing-xs)' }}>Failed</div>
+          <div style={{ fontSize: '28px', fontWeight: 400, letterSpacing: '-0.02em', color: 'var(--color-accent-red)' }}>{failed}</div>
         </div>
       </div>
 
       <div className="card">
-        <h2 style={{ marginBottom: 'var(--spacing-md)', fontSize: '18px' }}>Recent Investigations</h2>
+        <div className="section-header">
+          <h2 className="section-title">Recent Investigations</h2>
+          <span className="section-count">{investigations.length} total</span>
+        </div>
         {investigations.length === 0 ? (
           <div className="empty-state">
-            <div className="empty-state-icon">📭</div>
+            <div className="empty-state-icon">∅</div>
             <p>No investigations yet</p>
-            <a href="/new" className="btn btn-primary" style={{ marginTop: 'var(--spacing-md)' }}>Start New Investigation</a>
+            <a href="/new" className="btn btn-primary" style={{ marginTop: 'var(--spacing-md)', display: 'inline-block' }}>Start New Investigation</a>
           </div>
         ) : (
           <table className="table">
             <thead>
               <tr>
-                <th>ID</th>
+                <th style={{ width: '80px' }}>ID</th>
                 <th>Incident</th>
-                <th>Status</th>
-                <th>Stage</th>
-                <th>Progress</th>
-                <th>Agents</th>
-                <th>Created</th>
-                <th>Duration</th>
-                <th></th>
+                <th style={{ width: '110px' }}>Status</th>
+                <th style={{ width: '110px' }}>Stage</th>
+                <th style={{ width: '100px' }}>Progress</th>
+                <th style={{ width: '80px' }}>Agents</th>
+                <th style={{ width: '140px' }}>Created</th>
+                <th style={{ width: '100px' }}>Duration</th>
+                <th style={{ width: '60px' }}></th>
               </tr>
             </thead>
             <tbody>
@@ -97,31 +121,28 @@ export function Dashboard() {
                 return b.investigation_id.localeCompare(a.investigation_id);
               }).map((inv: InvestigationSummary) => (
                 <tr key={inv.investigation_id} style={{ cursor: 'pointer' }}>
-                  <td><code>{inv.investigation_id.slice(0, 8)}...</code></td>
+                  <td><code>{inv.investigation_id.slice(0, 8)}…</code></td>
                   <td>
                     <strong>{inv.incident_title}</strong>
                     <br />
-                    <small style={{ color: 'var(--color-text-secondary)' }}>{inv.incident_id}</small>
+                    <small style={{ color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)' }}>{inv.incident_id}</small>
                   </td>
-                  <td><span className={`badge ${getStatusBadge(inv.status)}`}>{inv.status}</span></td>
-                  <td>{inv.stage}</td>
                   <td>
-                    <div className="progress-bar">
+                    <span className={`badge ${getStatusBadge(inv.status)}`}>{inv.status}</span>
+                    <span className={` ${getStatusIndicator(inv.status)}`} style={{ marginLeft: 'var(--spacing-sm)' }}></span>
+                  </td>
+                  <td><code>{inv.stage}</code></td>
+                  <td>
+                    <div className="progress-bar" style={{ minWidth: '80px' }}>
                       <div className="progress-fill" style={{ width: `${inv.progress}%` }}></div>
                     </div>
-                    <small>{inv.progress.toFixed(0)}%</small>
+                    <small style={{ color: 'var(--color-text-muted)' }}>{inv.progress.toFixed(0)}%</small>
                   </td>
-                  <td>{inv.completed_agents.length} / {inv.completed_agents.length + inv.active_agents.length}</td>
-                  <td>{inv.created_at ? formatDistanceToNow(new Date(inv.created_at), { addSuffix: true }) : 'N/A'}</td>
-                  <td>
-                    {inv.completed_at && inv.started_at 
-                      ? `${((new Date(inv.completed_at).getTime() - new Date(inv.started_at).getTime()) / 1000).toFixed(1)}s`
-                      : inv.started_at
-                        ? `${((Date.now() - new Date(inv.started_at).getTime()) / 1000).toFixed(1)}s (running)`
-                        : 'N/A'}
-                  </td>
+                  <td><code>{inv.completed_agents.length} / {inv.completed_agents.length + inv.active_agents.length}</code></td>
+                  <td style={{ color: 'var(--color-text-secondary)' }}>{inv.created_at ? formatDistanceToNow(new Date(inv.created_at), { addSuffix: true }) : 'N/A'}</td>
+                  <td><code>{inv.completed_at && inv.started_at ? formatDuration(inv.started_at, inv.completed_at) : inv.started_at ? formatDuration(inv.started_at, null) + ' (running)' : 'N/A'}</code></td>
                   <td style={{ textAlign: 'right' }}>
-                    <a href={`/investigations/${inv.investigation_id}`} className="btn btn-secondary" style={{ fontSize: '12px', padding: '4px 8px' }}>
+                    <a href={`/investigations/${inv.investigation_id}`} className="btn btn-secondary" style={{ fontSize: '12px', padding: 'var(--spacing-xs) var(--spacing-sm)' }}>
                       View
                     </a>
                   </td>

@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useInvestigation, useInvestigationState } from '../hooks/useInvestigations';
 import { useInvestigationStream } from '../hooks/useInvestigationStream';
@@ -32,6 +32,18 @@ function getStatusBadge(status: string) {
   return badges[status] || '';
 }
 
+function getStatusIndicator(status: string) {
+  const indicators: Record<string, string> = {
+    queued: 'status-indicator queued',
+    running: 'status-indicator running',
+    analyzing: 'status-indicator running',
+    synthesizing: 'status-indicator running',
+    completed: 'status-indicator completed',
+    failed: 'status-indicator failed',
+  };
+  return indicators[status] || '';
+}
+
 function formatDuration(startedAt: string | null, completedAt: string | null) {
   if (!startedAt) return 'N/A';
   const start = new Date(startedAt).getTime();
@@ -41,19 +53,21 @@ function formatDuration(startedAt: string | null, completedAt: string | null) {
   return `${(diffMs / 1000).toFixed(1)}s`;
 }
 
-function CollapsibleSection({ title, expanded, onToggle, children }: { title: string; expanded: boolean; onToggle: () => void; children: React.ReactNode }) {
-  return (
-    <div style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
-      <button
-        style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 'var(--spacing-md)', background: 'var(--color-bg-tertiary)', border: 'none', color: 'inherit', fontSize: '16px', cursor: 'pointer' }}
-        onClick={onToggle}
-      >
-        <span>{title}</span>
-        <span>{expanded ? '▼' : '▶'}</span>
-      </button>
-      {expanded && <div style={{ padding: 'var(--spacing-md)' }}>{children}</div>}
-    </div>
-  );
+function getLeadingHypothesis(hypotheses: any[]) {
+  if (!hypotheses.length) return null;
+  return hypotheses.reduce((max, h) => h.confidence > max.confidence ? h : max, hypotheses[0]);
+}
+
+function getAgentStatusClass(agent: string, activeAgents: string[], completedAgents: string[]) {
+  if (activeAgents.includes(agent)) return 'active';
+  if (completedAgents.includes(agent)) return 'completed';
+  return 'pending';
+}
+
+function getAgentStatusText(agent: string, activeAgents: string[], completedAgents: string[]) {
+  if (activeAgents.includes(agent)) return 'Active';
+  if (completedAgents.includes(agent)) return 'Completed';
+  return 'Pending';
 }
 
 export function InvestigationDetail() {
@@ -62,39 +76,22 @@ export function InvestigationDetail() {
   const { investigation, loading, error, refetch } = useInvestigation(investigationId || null);
   const { state, loading: stateLoading, refetch: refetchState } = useInvestigationState(investigationId || null);
 
-  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
-    timeline: true,
-    evidence: false,
-    findings: false,
-    hypotheses: false,
-    recommendations: false,
-  });
-
-  const toggleSection = (section: string) => {
-    setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
-  };
-
+  const [activeTab, setActiveTab] = useState<'overview' | 'evidence' | 'findings' | 'hypotheses' | 'recommendations' | 'timeline'>('overview');
   const [streamError, setStreamError] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
-
-  // Track if we've already received initial state from SSE to avoid refetch loops
   const hasReceivedInitialState = useRef(false);
 
   const handleSSEEvent = useCallback((_: TimelineEvent) => {
-    // SSE events are handled by updating state via onStateChange
+    // Events are handled via state updates
   }, []);
 
   const handleSSEStateChange = useCallback((_: FullInvestigationState) => {
-    // Only refetch if we haven't received initial state yet
-    // After that, the SSE events should be sufficient
     if (!hasReceivedInitialState.current) {
       hasReceivedInitialState.current = true;
-      // Don't refetch - the SSE state is already complete
     }
   }, []);
 
   const handleSSEComplete = useCallback((_: FullInvestigationState) => {
-    // Investigation complete - could refetch once to ensure we have latest
     refetchState();
   }, [refetchState]);
 
@@ -103,7 +100,6 @@ export function InvestigationDetail() {
     setConnected(false);
   }, []);
 
-  // Use SSE for live updates
   useInvestigationStream({
     investigationId: investigationId || null,
     onEvent: handleSSEEvent,
@@ -111,6 +107,15 @@ export function InvestigationDetail() {
     onComplete: handleSSEComplete,
     onError: handleSSEError,
   });
+
+  // Track connection status
+  useEffect(() => {
+    const stateManager = state || investigation;
+    if (stateManager) {
+      const status = stateManager.status;
+      setConnected(status !== 'completed' && status !== 'failed');
+    }
+  }, [state, investigation]);
 
   const handleApprove = async (index: number) => {
     const note = prompt('Approval note (optional):');
@@ -138,8 +143,8 @@ export function InvestigationDetail() {
 
   if (loading || stateLoading) {
     return (
-      <div className="container" style={{ textAlign: 'center', padding: 'var(--spacing-xl)' }}>
-        Loading investigation...
+      <div className="container" style={{ textAlign: 'center', padding: 'var(--spacing-xl)', color: 'var(--color-text-muted)' }}>
+        Loading investigation…
       </div>
     );
   }
@@ -147,10 +152,10 @@ export function InvestigationDetail() {
   if (error && !investigation) {
     return (
       <div className="container">
-        <div className="card" style={{ borderColor: 'var(--color-error)' }}>
-          <h2>Investigation Not Found</h2>
-          <p>{error}</p>
-          <button className="btn btn-primary" onClick={() => navigate('/')} style={{ marginTop: 'var(--spacing-md)' }}>
+        <div className="error-banner">
+          <strong>Investigation Not Found</strong>
+          <p style={{ marginTop: 'var(--spacing-xs)' }}>{error}</p>
+          <button className="btn btn-secondary" onClick={() => navigate('/')} style={{ marginTop: 'var(--spacing-md)' }}>
             Back to Dashboard
           </button>
         </div>
@@ -161,327 +166,367 @@ export function InvestigationDetail() {
   const currentInvestigation = investigation!;
   const currentState = state || currentInvestigation as any;
   const currentStage = currentState.stage || 'queued';
+  const isComplete = currentInvestigation.status === 'completed' || currentInvestigation.status === 'failed';
+  const leadingHypothesis = getLeadingHypothesis(currentState.hypotheses || []);
 
   return (
     <div className="container">
       <div className="page-header">
         <div>
-          <h1 className="page-title">{currentInvestigation.incident_title}</h1>
-          <div style={{ display: 'flex', gap: 'var(--spacing-md)', marginTop: 'var(--spacing-xs)', fontSize: '14px', color: 'var(--color-text-secondary)' }}>
-            <span>ID: <code>{currentInvestigation.incident_id}</code></span>
-            <span>Investigation: <code>{currentInvestigation.investigation_id.slice(0, 8)}...</code></span>
+          <h1 className="page-title">
+            {currentInvestigation.incident_title}
+            <small>Investigation {currentInvestigation.investigation_id.slice(0, 8)}…</small>
+          </h1>
+          <div style={{ display: 'flex', gap: 'var(--spacing-lg)', marginTop: 'var(--spacing-xs)', fontSize: '13px', color: 'var(--color-text-secondary)' }}>
+            <span>Incident: <code>{currentInvestigation.incident_id}</code></span>
+            <span className={getStatusIndicator(currentInvestigation.status)}>
+              {currentInvestigation.status.charAt(0).toUpperCase() + currentInvestigation.status.slice(1)}
+            </span>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 'var(--spacing-md)', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 'var(--spacing-sm)', alignItems: 'center' }}>
           <button className="btn btn-secondary" onClick={() => navigate('/')}>← Back</button>
-          <button className="btn btn-secondary" onClick={() => { refetch(); }}>Refresh</button>
+          <button className="btn btn-secondary" onClick={() => { refetch(); refetchState(); }}>Refresh</button>
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 350px', gap: 'var(--spacing-lg)' }}>
-        <div>
-          {/* Stage Progress */}
-          <div className="card" style={{ marginBottom: 'var(--spacing-md)' }}>
-            <h3 style={{ marginBottom: 'var(--spacing-md)' }}>Investigation Progress</h3>
-            <div className="stage-indicator">
-              {STAGE_ORDER.map(stage => (
-                <div
-                  key={stage}
-                  className={`stage-step ${stage === 'failed' && currentInvestigation.status === 'failed' ? 'failed' : getStageIndex(stage) < getStageIndex(currentStage) ? 'completed' : getStageIndex(stage) === getStageIndex(currentStage) ? 'active' : ''}`}
-                >
-                  <div className="stage-icon" style={{
-                    backgroundColor: stage === 'failed' && currentInvestigation.status === 'failed' ? 'var(--color-error)' :
-                                     getStageIndex(stage) < getStageIndex(currentStage) ? 'var(--color-success)' :
-                                     getStageIndex(stage) === getStageIndex(currentStage) ? 'var(--color-accent)' : 'transparent',
-                    border: stage === 'failed' && currentInvestigation.status === 'failed' ? '2px solid var(--color-error)' :
-                            getStageIndex(stage) < getStageIndex(currentStage) ? '2px solid var(--color-success)' :
-                            getStageIndex(stage) === getStageIndex(currentStage) ? '2px solid var(--color-accent)' : '2px solid var(--color-border)'
-                  }}>
-                    {getStageIndex(stage) < getStageIndex(currentStage) ? '✓' :
-                     getStageIndex(stage) === getStageIndex(currentStage) ? '▶' :
-                     stage === 'failed' && currentInvestigation.status === 'failed' ? '✗' : ''}
-                  </div>
-                  <span>{stage.charAt(0).toUpperCase() + stage.slice(1)}</span>
+      {/* Stage Progress Bar */}
+      <div className="card" style={{ marginBottom: 'var(--spacing-lg)' }}>
+        <div className="stage-indicator">
+          {STAGE_ORDER.map(stage => {
+            const idx = getStageIndex(stage);
+            const currentIdx = getStageIndex(currentStage);
+            let className = 'stage-step';
+            if (stage === 'failed' && currentInvestigation.status === 'failed') className += ' failed';
+            else if (idx < currentIdx) className += ' completed';
+            else if (idx === currentIdx && !isComplete) className += ' active';
+            return (
+              <div key={stage} className={className}>
+                <div className="stage-icon" style={{
+                  backgroundColor: stage === 'failed' && currentInvestigation.status === 'failed' ? 'var(--color-accent-red)' :
+                                   idx < currentIdx ? 'var(--color-accent-green)' :
+                                   idx === currentIdx && !isComplete ? 'var(--color-accent-bronze)' : 'transparent',
+                  borderColor: stage === 'failed' && currentInvestigation.status === 'failed' ? 'var(--color-accent-red)' :
+                               idx < currentIdx ? 'var(--color-accent-green)' :
+                               idx === currentIdx && !isComplete ? 'var(--color-accent-bronze)' : 'var(--color-border)',
+                }}>
+                  {idx < currentIdx ? '✓' :
+                   idx === currentIdx && !isComplete ? '▸' :
+                   stage === 'failed' && currentInvestigation.status === 'failed' ? '✕' : ''}
                 </div>
-              ))}
-            </div>
-            <div className="progress-bar" style={{ marginTop: 'var(--spacing-md)' }}>
-              <div className="progress-fill" style={{ width: `${currentInvestigation.progress}%` }}></div>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 'var(--spacing-xs)', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
-              <span>Status: <strong>{currentInvestigation.status}</strong></span>
-              <span>Stage: <strong>{currentStage}</strong></span>
-              <span>Progress: <strong>{currentInvestigation.progress.toFixed(0)}%</strong></span>
-              <span>Duration: <strong>{formatDuration(currentInvestigation.started_at, currentInvestigation.completed_at)}</strong></span>
-            </div>
+                <span>{stage.charAt(0).toUpperCase() + stage.slice(1)}</span>
+              </div>
+            );
+          })}
+        </div>
+        <div className="progress-bar" style={{ marginTop: 'var(--spacing-md)' }}>
+          <div className="progress-fill" style={{ width: `${currentInvestigation.progress}%` }}></div>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 'var(--spacing-sm)', fontSize: '12px', color: 'var(--color-text-muted)' }}>
+          <span>Status: <strong>{currentInvestigation.status}</strong></span>
+          <span>Stage: <strong>{currentStage}</strong></span>
+          <span>Progress: <strong>{currentInvestigation.progress.toFixed(0)}%</strong></span>
+          <span>Duration: <strong>{formatDuration(currentInvestigation.started_at, currentInvestigation.completed_at)}</strong></span>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 'var(--spacing-lg)' }}>
+        <div>
+          {/* Main Content Tabs */}
+          <div className="tabs" role="tablist">
+            <button role="tab" className={`tab ${activeTab === 'overview' ? 'active' : ''}`} onClick={() => setActiveTab('overview')} aria-selected={activeTab === 'overview'}>Overview</button>
+            <button role="tab" className={`tab ${activeTab === 'evidence' ? 'active' : ''}`} onClick={() => setActiveTab('evidence')} aria-selected={activeTab === 'evidence'}>Evidence <span className="section-count">({currentState.evidence?.length || 0})</span></button>
+            <button role="tab" className={`tab ${activeTab === 'findings' ? 'active' : ''}`} onClick={() => setActiveTab('findings')} aria-selected={activeTab === 'findings'}>Findings <span className="section-count">({currentState.findings?.length || 0})</span></button>
+            <button role="tab" className={`tab ${activeTab === 'hypotheses' ? 'active' : ''}`} onClick={() => setActiveTab('hypotheses')} aria-selected={activeTab === 'hypotheses'}>Hypotheses <span className="section-count">({currentState.hypotheses?.length || 0})</span></button>
+            <button role="tab" className={`tab ${activeTab === 'recommendations' ? 'active' : ''}`} onClick={() => setActiveTab('recommendations')} aria-selected={activeTab === 'recommendations'}>Recommendations <span className="section-count">({currentState.recommendations?.length || 0})</span></button>
+            <button role="tab" className={`tab ${activeTab === 'timeline' ? 'active' : ''}`} onClick={() => setActiveTab('timeline')} aria-selected={activeTab === 'timeline'}>Timeline <span className="section-count">({currentState.timeline?.length || 0})</span></button>
           </div>
 
-          {/* Timeline / Event Feed */}
-          <div className="card" style={{ marginBottom: 'var(--spacing-md)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-md)' }}>
-              <h3>
-                <button
-                  className="btn btn-secondary"
-                  style={{ fontSize: '16px', padding: 0, background: 'none', border: 'none', color: 'inherit' }}
-                  onClick={() => toggleSection('timeline')}
-                >
-                  📋 Timeline ({currentState.timeline?.length || 0})
-                  {expandedSections.timeline ? ' ▼' : ' ▶'}
-                </button>
-              </h3>
-              <div style={{ display: 'flex', gap: 'var(--spacing-sm)', alignItems: 'center' }}>
-                <span className={`badge ${connected ? 'badge-running' : 'badge-failed'}`}>
-                  {connected ? '🔴 Live' : '⚫ Disconnected'}
-                </span>
-                {streamError && (
-                  <span className="badge badge-failed">SSE Error</span>
+          {activeTab === 'overview' && (
+            <div className="panel active">
+              {/* Incident Summary */}
+              <div className="incident-summary">
+                <strong>Description:</strong> {currentInvestigation.incident_description || 'No description available.'}
+                {currentInvestigation.incident_affected_services && currentInvestigation.incident_affected_services.length > 0 && (
+                  <>
+                    <br /><br />
+                    <strong>Affected Services:</strong> {currentInvestigation.incident_affected_services.join(', ')}
+                  </>
+                )}
+                {currentInvestigation.incident_severity && (
+                  <>
+                    <br /><br />
+                    <strong>Severity:</strong> <code>{currentInvestigation.incident_severity}</code>
+                  </>
                 )}
               </div>
-            </div>
-            {expandedSections.timeline && (
-              <div className="event-feed">
-                {(() => {
-                  const events = currentState.timeline?.slice().reverse() || [];
-                  return events.map((event: any, idx: number) => (
-                    <div key={idx} className="event-item">
-                      <span className="event-time">{formatTime(event.timestamp)}</span>
-                      <span className="event-type">{event.type}</span>
-                      <span className="event-description">{event.description}</span>
-                      {event.agent && <span className="event-agent">[{event.agent}]</span>}
-                    </div>
-                  ));
-                })()}
-              </div>
-            )}
-          </div>
-        </div>
 
-        <aside>
-          {/* Status Card */}
-          <div className="card" style={{ marginBottom: 'var(--spacing-md)', position: 'sticky', top: 'var(--spacing-lg)' }}>
-            <h3 style={{ marginBottom: 'var(--spacing-md)' }}>Status</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-sm)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--color-text-secondary)' }}>Incident ID</span>
-                <code>{currentInvestigation.incident_id}</code>
+              {/* Leading Hypothesis */}
+              {leadingHypothesis && (
+                <div className="leading-hypothesis">
+                  <div className="hypothesis-label">Leading Hypothesis</div>
+                  <div className="hypothesis-text">{leadingHypothesis.description}</div>
+                  <div className="hypothesis-confidence">
+                    Confidence: <strong>{(leadingHypothesis.confidence * 100).toFixed(0)}%</strong>
+                    {leadingHypothesis.supporting_evidence?.length && (
+                      <> · Supported by {leadingHypothesis.supporting_evidence.length} evidence item(s)</>
+                    )}
+                    {leadingHypothesis.contradicting_evidence?.length && (
+                      <> · {leadingHypothesis.contradicting_evidence.length} contradicting</>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Quick Stats */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 'var(--spacing-md)', marginTop: 'var(--spacing-lg)' }}>
+                <div className="card" style={{ padding: 'var(--spacing-md)' }}>
+                  <div style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-muted)', marginBottom: 'var(--spacing-xs)' }}>Evidence Collected</div>
+                  <div style={{ fontSize: '24px', fontWeight: 400 }}>{currentState.evidence?.length || 0}</div>
+                </div>
+                <div className="card" style={{ padding: 'var(--spacing-md)' }}>
+                  <div style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-muted)', marginBottom: 'var(--spacing-xs)' }}>Findings</div>
+                  <div style={{ fontSize: '24px', fontWeight: 400 }}>{currentState.findings?.length || 0}</div>
+                </div>
+                <div className="card" style={{ padding: 'var(--spacing-md)' }}>
+                  <div style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-muted)', marginBottom: 'var(--spacing-xs)' }}>Hypotheses</div>
+                  <div style={{ fontSize: '24px', fontWeight: 400 }}>{currentState.hypotheses?.length || 0}</div>
+                </div>
+                <div className="card" style={{ padding: 'var(--spacing-md)' }}>
+                  <div style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-muted)', marginBottom: 'var(--spacing-xs)' }}>Recommendations</div>
+                  <div style={{ fontSize: '24px', fontWeight: 400 }}>{currentState.recommendations?.length || 0}</div>
+                </div>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--color-text-secondary)' }}>Status</span>
-                <span className={`badge ${getStatusBadge(currentInvestigation.status)}`}>{currentInvestigation.status}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--color-text-secondary)' }}>Stage</span>
-                <span>{currentState.stage || 'queued'}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--color-text-secondary)' }}>Progress</span>
-                <span>{currentInvestigation.progress.toFixed(0)}%</span>
-              </div>
-              <div className="progress-bar" style={{ marginTop: 'var(--spacing-xs)' }}>
-                <div className="progress-fill" style={{ width: `${currentInvestigation.progress}%` }}></div>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                <span style={{ color: 'var(--color-text-secondary)' }}>Created</span>
-                <span>{currentInvestigation.created_at ? formatTime(currentInvestigation.created_at) : 'N/A'}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                <span style={{ color: 'var(--color-text-secondary)' }}>Started</span>
-                <span>{currentInvestigation.started_at ? formatTime(currentInvestigation.started_at) : 'N/A'}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                <span style={{ color: 'var(--color-text-secondary)' }}>Completed</span>
-                <span>{currentInvestigation.completed_at ? formatTime(currentInvestigation.completed_at) : 'N/A'}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                <span style={{ color: 'var(--color-text-secondary)' }}>Duration</span>
-                <span>{formatDuration(currentInvestigation.started_at, currentInvestigation.completed_at)}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                <span style={{ color: 'var(--color-text-secondary)' }}>Evidence</span>
-                <strong>{currentInvestigation.evidence_count}</strong>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                <span style={{ color: 'var(--color-text-secondary)' }}>Findings</span>
-                <strong>{currentInvestigation.findings_count}</strong>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                <span style={{ color: 'var(--color-text-secondary)' }}>Hypotheses</span>
-                <strong>{currentState.hypotheses_count || 0}</strong>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                <span style={{ color: 'var(--color-text-secondary)' }}>Recommendations</span>
-                <strong>{currentInvestigation.recommendations_count}</strong>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                <span style={{ color: 'var(--color-text-secondary)' }}>Active Agents</span>
-                <strong>{currentInvestigation.active_agents.length}</strong>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                <span style={{ color: 'var(--color-text-secondary)' }}>Completed Agents</span>
-                <strong>{currentInvestigation.completed_agents.length}</strong>
-              </div>
-              {currentInvestigation.error && (
-                <div style={{ marginTop: 'var(--spacing-md)', padding: 'var(--spacing-sm)', backgroundColor: 'rgba(248, 81, 73, 0.1)', border: '1px solid var(--color-error)', borderRadius: 'var(--radius-sm)', color: 'var(--color-error)', fontSize: '12px' }}>
-                  Error: {currentInvestigation.error}
+
+              {/* Next Steps */}
+              {currentState.recommendations?.length && (
+                <div style={{ marginTop: 'var(--spacing-lg)' }}>
+                  <h3 style={{ fontSize: '15px', fontWeight: 500, marginBottom: 'var(--spacing-md)' }}>Recommended Next Steps</h3>
+                  {currentState.recommendations.map((r: any, idx: number) => (
+                    <div key={idx} className="recommendation-card">
+                      <header>
+                        <span className="recommendation-title">Recommendation {idx + 1}</span>
+                        <span className={`badge badge-${r.status}`}>{r.status}</span>
+                      </header>
+                      <div className="recommendation-action"><strong>Action:</strong> {r.action}</div>
+                      <div className="recommendation-rationale"><strong>Rationale:</strong> {r.rationale}</div>
+                      <div className="recommendation-risk"><strong>Risk:</strong> {r.risk}</div>
+                      <div className="recommendation-meta">
+                        <span>Confidence: {(r.confidence * 100).toFixed(0)}%</span>
+                        <span>Approval: {r.requires_approval ? 'Required' : 'Not required'}</span>
+                      </div>
+                      {r.requires_approval && r.status === 'pending' && (
+                        <div className="recommendation-actions">
+                          <button className="btn btn-primary" style={{ fontSize: '12px' }} onClick={() => handleApprove(idx)}>Approve</button>
+                          <button className="btn btn-danger" style={{ fontSize: '12px' }} onClick={() => handleReject(idx)}>Reject</button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
-          </div>
+          )}
 
-          {/* Agents */}
-          <div className="card" style={{ marginBottom: 'var(--spacing-md)' }}>
-            <h3 style={{ marginBottom: 'var(--spacing-md)' }}>Agents</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-sm)' }}>
-              {['Observability Agent', 'Repository Agent', 'Database Agent'].map(agent => {
-                const isActive = currentInvestigation.active_agents.includes(agent);
-                const isCompleted = currentInvestigation.completed_agents.includes(agent);
-                return (
-                  <div key={agent} style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 'var(--spacing-sm)',
-                    padding: 'var(--spacing-sm)',
-                    backgroundColor: isActive ? 'rgba(88, 166, 255, 0.1)' : isCompleted ? 'rgba(63, 185, 80, 0.1)' : 'transparent',
-                    borderRadius: 'var(--radius-sm)',
-                    border: isActive ? '1px solid var(--color-accent)' : isCompleted ? '1px solid var(--color-success)' : '1px solid var(--color-border)',
-                  }}>
-                    <span style={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: '50%',
-                      backgroundColor: isActive ? 'var(--color-accent)' : isCompleted ? 'var(--color-success)' : 'var(--color-border)',
-                    }}></span>
-                    <span style={{ flex: 1 }}>{agent}</span>
-                    <span className={`badge ${isActive ? 'badge-running' : isCompleted ? 'badge-completed' : 'badge-pending'}`}>
-                      {isActive ? 'Running' : isCompleted ? 'Done' : 'Pending'}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </aside>
-      </div>
-
-      {/* Collapsible Sections */}
-      <div className="card" style={{ marginTop: 'var(--spacing-lg)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-md)' }}>
-          <h2>Investigation Artifacts</h2>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--spacing-md)' }}>
-          <CollapsibleSection
-            title={`Evidence (${currentState.evidence.length})`}
-            expanded={expandedSections.evidence}
-            onToggle={() => toggleSection('evidence')}
-          >
-            <div style={{ maxHeight: '400px', overflow: 'auto' }}>
-              {currentState.evidence.length === 0 ? (
-                <div className="empty-state" style={{ padding: 'var(--spacing-lg)' }}>No evidence collected yet</div>
+          {activeTab === 'evidence' && (
+            <div className="panel active">
+              {currentState.evidence?.length === 0 ? (
+                <div className="empty-state">
+                  <div className="empty-state-icon">∅</div>
+                  <p>No evidence collected yet</p>
+                </div>
               ) : (
-                <table className="table">
+                <table className="evidence-table">
                   <thead>
                     <tr>
-                      <th>Type</th>
-                      <th>Source</th>
+                      <th style={{ width: '90px' }}>Type</th>
+                      <th style={{ width: '120px' }}>Source</th>
                       <th>Description</th>
-                      <th>Relevance</th>
+                      <th style={{ width: '80px' }}>Relevance</th>
                     </tr>
                   </thead>
                   <tbody>
                     {currentState.evidence.map((e: any, idx: number) => (
                       <tr key={idx}>
-                        <td><span className={`badge badge-${e.type}`}>{e.type}</span></td>
-                        <td><code>{e.source}</code></td>
-                        <td>{e.description}</td>
-                        <td>{(e.relevance * 100).toFixed(0)}%</td>
+                        <td className="evidence-type"><span className={`badge badge-type-${e.type}`}>{e.type}</span></td>
+                        <td className="evidence-source"><code>{e.source}</code></td>
+                        <td className="evidence-description">{e.description}</td>
+                        <td className="evidence-relevance">{(e.relevance * 100).toFixed(0)}%</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               )}
             </div>
-          </CollapsibleSection>
+          )}
 
-          <CollapsibleSection
-            title={`Findings (${currentState.findings.length})`}
-            expanded={expandedSections.findings}
-            onToggle={() => toggleSection('findings')}
-          >
-            {currentState.findings.length === 0 ? (
-              <div className="empty-state" style={{ padding: 'var(--spacing-lg)' }}>No findings yet</div>
-            ) : (
-              currentState.findings.map((f: any, idx: number) => (
-                <div key={idx} style={{ borderBottom: '1px solid var(--color-border)', padding: 'var(--spacing-md)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 'var(--spacing-xs)' }}>
-                    <strong>{f.agent}</strong>
-                    <span className="badge badge-approved">Confidence: {(f.confidence * 100).toFixed(0)}%</span>
-                  </div>
-                  <p style={{ marginBottom: 'var(--spacing-sm)' }}>{f.summary}</p>
-                  <p style={{ fontStyle: 'italic', color: 'var(--color-text-secondary)', marginBottom: 'var(--spacing-sm)' }}>Hypothesis: {f.hypothesis}</p>
-                  <small>Evidence: {f.evidence?.length || 0} items</small>
+          {activeTab === 'findings' && (
+            <div className="panel active">
+              {currentState.findings?.length === 0 ? (
+                <div className="empty-state">
+                  <div className="empty-state-icon">∅</div>
+                  <p>No findings yet</p>
                 </div>
-              ))
-            )}
-          </CollapsibleSection>
-
-          <CollapsibleSection
-            title={`Hypotheses (${currentState.hypotheses.length})`}
-            expanded={expandedSections.hypotheses}
-            onToggle={() => toggleSection('hypotheses')}
-          >
-            {currentState.hypotheses.length === 0 ? (
-              <div className="empty-state" style={{ padding: 'var(--spacing-lg)' }}>No hypotheses yet</div>
-            ) : (
-              currentState.hypotheses.map((h: any, idx: number) => (
-                <div key={idx} style={{ borderBottom: '1px solid var(--color-border)', padding: 'var(--spacing-md)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 'var(--spacing-xs)' }}>
-                    <strong>Hypothesis {idx + 1}</strong>
-                    <span className="badge badge-approved">{(h.confidence * 100).toFixed(0)}%</span>
+              ) : (
+                currentState.findings.map((f: any, idx: number) => (
+                  <div key={idx} className="finding-card">
+                    <header>
+                      <span className="finding-agent">{f.agent}</span>
+                      <span className="finding-confidence">Confidence: {(f.confidence * 100).toFixed(0)}%</span>
+                    </header>
+                    <div className="finding-summary">{f.summary}</div>
+                    <div className="finding-hypothesis">Hypothesis: {f.hypothesis}</div>
+                    <div className="finding-meta">Evidence items: {f.evidence?.length || 0} · Next actions: {f.next_actions?.length || 0}</div>
                   </div>
-                  <p style={{ marginBottom: 'var(--spacing-sm)' }}>{h.description}</p>
-                  <small>Status: {h.status} | Supporting evidence: {h.supporting_evidence?.length || 0}</small>
+                ))
+              )}
+            </div>
+          )}
+
+          {activeTab === 'hypotheses' && (
+            <div className="panel active">
+              {currentState.hypotheses?.length === 0 ? (
+                <div className="empty-state">
+                  <div className="empty-state-icon">∅</div>
+                  <p>No hypotheses yet</p>
                 </div>
-              ))
-            )}
-          </CollapsibleSection>
-
-          <CollapsibleSection
-            title={`Recommendations (${currentState.recommendations.length})`}
-            expanded={expandedSections.recommendations}
-            onToggle={() => toggleSection('recommendations')}
-          >
-            {currentState.recommendations.length === 0 ? (
-              <div className="empty-state" style={{ padding: 'var(--spacing-lg)' }}>No recommendations yet</div>
-            ) : (
-              currentState.recommendations.map((r: any, idx: number) => (
-                <div key={idx} style={{ borderBottom: '1px solid var(--color-border)', padding: 'var(--spacing-md)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 'var(--spacing-sm)' }}>
-                    <strong style={{ flex: 1 }}>Recommendation {idx + 1}</strong>
-                    <span className={`badge badge-${r.status}`}>{r.status}</span>
-                  </div>
-                  <p style={{ marginBottom: 'var(--spacing-xs)' }}><strong>Action:</strong> {r.action}</p>
-                  <p style={{ marginBottom: 'var(--spacing-xs)', color: 'var(--color-text-secondary)' }}><strong>Rationale:</strong> {r.rationale}</p>
-                  <p style={{ marginBottom: 'var(--spacing-xs)', color: 'var(--color-text-secondary)' }}><strong>Risk:</strong> {r.risk}</p>
-                  <div style={{ display: 'flex', gap: 'var(--spacing-md)', fontSize: '12px', color: 'var(--color-text-secondary)', marginBottom: 'var(--spacing-md)' }}>
-                    <span>Confidence: {(r.confidence * 100).toFixed(0)}%</span>
-                    <span>Requires Approval: {r.requires_approval ? 'Yes' : 'No'}</span>
-                  </div>
-                  {r.requires_approval && r.status === 'pending' && (
-                    <div style={{ display: 'flex', gap: 'var(--spacing-sm)' }}>
-                      <button className="btn btn-primary" style={{ fontSize: '12px' }} onClick={() => handleApprove(idx)}>
-                        Approve
-                      </button>
-                      <button className="btn btn-danger" style={{ fontSize: '12px' }} onClick={() => handleReject(idx)}>
-                        Reject
-                      </button>
+              ) : (
+                currentState.hypotheses.map((h: any, idx: number) => (
+                  <div key={idx} className="hypothesis-card">
+                    <header>
+                      <span className="hypothesis-title">Hypothesis {idx + 1}</span>
+                      <span className="hypothesis-confidence">{(h.confidence * 100).toFixed(0)}%</span>
+                    </header>
+                    <div className="hypothesis-description">{h.description}</div>
+                    <div className="hypothesis-meta">
+                      Status: {h.status} · Supporting: {h.supporting_evidence?.length || 0} · Contradicting: {h.contradicting_evidence?.length || 0}
                     </div>
-                  )}
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
+          {activeTab === 'recommendations' && (
+            <div className="panel active">
+              {currentState.recommendations?.length === 0 ? (
+                <div className="empty-state">
+                  <div className="empty-state-icon">∅</div>
+                  <p>No recommendations yet</p>
                 </div>
-              ))
-            )}
-          </CollapsibleSection>
+              ) : (
+                currentState.recommendations.map((r: any, idx: number) => (
+                  <div key={idx} className="recommendation-card">
+                    <header>
+                      <span className="recommendation-title">Recommendation {idx + 1}</span>
+                      <span className={`badge badge-${r.status}`}>{r.status}</span>
+                    </header>
+                    <div className="recommendation-action"><strong>Action:</strong> {r.action}</div>
+                    <div className="recommendation-rationale"><strong>Rationale:</strong> {r.rationale}</div>
+                    <div className="recommendation-risk"><strong>Risk:</strong> {r.risk}</div>
+                    <div className="recommendation-meta">
+                      <span>Confidence: {(r.confidence * 100).toFixed(0)}%</span>
+                      <span>Approval: {r.requires_approval ? 'Required' : 'Not required'}</span>
+                    </div>
+                    {r.requires_approval && r.status === 'pending' && (
+                      <div className="recommendation-actions">
+                        <button className="btn btn-primary" style={{ fontSize: '12px' }} onClick={() => handleApprove(idx)}>Approve</button>
+                        <button className="btn btn-danger" style={{ fontSize: '12px' }} onClick={() => handleReject(idx)}>Reject</button>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
+          {activeTab === 'timeline' && (
+            <div className="panel active">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-md)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' }}>
+                  <span className={`connection-status ${connected ? 'connected' : 'disconnected'}`}>
+                    {connected ? 'Live' : 'Disconnected'}
+                  </span>
+                  {streamError && <span className="badge badge-failed">SSE Error</span>}
+                </div>
+              </div>
+              <div className="event-feed">
+                {(currentState.timeline || []).slice().reverse().map((event: any, idx: number) => (
+                  <div key={idx} className="event-item">
+                    <span className="event-time">{formatTime(event.timestamp)}</span>
+                    <span className="event-type">{event.type.replace(/_/g, ' ')}</span>
+                    <span className="event-description">{event.description}</span>
+                    {event.agent && <span className="event-agent">{event.agent}</span>}
+                  </div>
+                ))}
+                {(currentState.timeline || []).length === 0 && (
+                  <div className="empty-state" style={{ padding: 'var(--spacing-xl)' }}>
+                    <div className="empty-state-icon">∅</div>
+                    <p>No timeline events yet</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
+
+        <aside>
+          {/* Status Panel */}
+          <div className="card" style={{ marginBottom: 'var(--spacing-md)', position: 'sticky', top: 'var(--spacing-lg)' }}>
+            <h3 style={{ marginBottom: 'var(--spacing-md)', fontSize: '15px', fontWeight: 500 }}>Status</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-sm)' }}>
+              <div className="key-value"><span className="key">Incident ID</span><span className="value"><code>{currentInvestigation.incident_id}</code></span></div>
+              <div className="key-value"><span className="key">Status</span><span className="value"><span className={`badge ${getStatusBadge(currentInvestigation.status)}`}>{currentInvestigation.status}</span></span></div>
+              <div className="key-value"><span className="key">Stage</span><span className="value"><code>{currentStage}</code></span></div>
+              <div className="key-value"><span className="key">Progress</span><span className="value">{currentInvestigation.progress.toFixed(0)}%</span></div>
+              <div style={{ marginTop: 'var(--spacing-xs)' }}>
+                <div className="progress-bar"><div className="progress-fill" style={{ width: `${currentInvestigation.progress}%` }}></div></div>
+              </div>
+              <div className="key-value"><span className="key">Created</span><span className="value">{currentInvestigation.created_at ? formatTime(currentInvestigation.created_at) : 'N/A'}</span></div>
+              <div className="key-value"><span className="key">Started</span><span className="value">{currentInvestigation.started_at ? formatTime(currentInvestigation.started_at) : 'N/A'}</span></div>
+              <div className="key-value"><span className="key">Completed</span><span className="value">{currentInvestigation.completed_at ? formatTime(currentInvestigation.completed_at) : 'N/A'}</span></div>
+              <div className="key-value"><span className="key">Duration</span><span className="value">{formatDuration(currentInvestigation.started_at, currentInvestigation.completed_at)}</span></div>
+              <div className="divider"></div>
+              <div className="key-value"><span className="key">Evidence</span><span className="value"><strong>{currentInvestigation.evidence_count}</strong></span></div>
+              <div className="key-value"><span className="key">Findings</span><span className="value"><strong>{currentInvestigation.findings_count}</strong></span></div>
+              <div className="key-value"><span className="key">Hypotheses</span><span className="value"><strong>{currentState.hypotheses?.length || 0}</strong></span></div>
+              <div className="key-value"><span className="key">Recommendations</span><span className="value"><strong>{currentInvestigation.recommendations_count}</strong></span></div>
+              <div className="divider"></div>
+              {currentInvestigation.error && (
+                <div className="error-banner" style={{ marginTop: 'var(--spacing-sm)' }}>
+                  Error: {currentInvestigation.error}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Agents Panel */}
+          <div className="card" style={{ position: 'sticky', top: 'calc(var(--spacing-lg) + 320px)' }}>
+            <h3 style={{ marginBottom: 'var(--spacing-md)', fontSize: '15px', fontWeight: 500 }}>Agents</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-sm)' }}>
+              {currentState.selected_agents?.length > 0 ? (
+                currentState.selected_agents.map((agent: string) => (
+                  <div key={agent} className={`agent-card ${getAgentStatusClass(agent, currentInvestigation.active_agents, currentInvestigation.completed_agents)}`}>
+                    <span className="agent-dot"></span>
+                    <span className="agent-name">{agent}</span>
+                    <span className="agent-status">{getAgentStatusText(agent, currentInvestigation.active_agents, currentInvestigation.completed_agents)}</span>
+                  </div>
+                ))
+              ) : (
+                ['Observability Agent', 'Repository Agent', 'Database Agent'].map(agent => {
+                  const isSelected = currentInvestigation.active_agents.includes(agent) || currentInvestigation.completed_agents.includes(agent);
+                  return (
+                    <div key={agent} className={`agent-card ${getAgentStatusClass(agent, currentInvestigation.active_agents, currentInvestigation.completed_agents)}`} style={{ opacity: isSelected ? 1 : 0.5 }}>
+                      <span className="agent-dot"></span>
+                      <span className="agent-name">{agent}</span>
+                      <span className="agent-status">{getAgentStatusText(agent, currentInvestigation.active_agents, currentInvestigation.completed_agents)}</span>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </aside>
       </div>
     </div>
   );

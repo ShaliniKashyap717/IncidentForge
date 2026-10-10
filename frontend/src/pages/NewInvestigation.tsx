@@ -66,14 +66,14 @@ export function NewInvestigation() {
   };
 
   return (
-    <div className="container" style={{ maxWidth: '800px' }}>
+    <div className="container" style={{ maxWidth: '720px' }}>
       <h1 className="page-title">New Investigation</h1>
 
       <form onSubmit={handleSubmit}>
         <div className="card" style={{ marginBottom: 'var(--spacing-md)' }}>
-          <h3 style={{ marginBottom: 'var(--spacing-md)' }}>Investigation Mode</h3>
-          <div style={{ display: 'flex', gap: 'var(--spacing-md)' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)', cursor: 'pointer' }}>
+          <h3 style={{ marginBottom: 'var(--spacing-md)', fontSize: '15px', fontWeight: 500 }}>Investigation Mode</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-sm)' }}>
+            <label className="radio-label">
               <input
                 type="radio"
                 name="mode"
@@ -81,9 +81,9 @@ export function NewInvestigation() {
                 checked={mode === 'scenario'}
                 onChange={() => setMode('scenario')}
               />
-              <strong>Scenario</strong> - Use a predefined scenario with telemetry data
+              <strong>Scenario</strong> — Use a predefined scenario with telemetry data
             </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)', cursor: 'pointer' }}>
+            <label className="radio-label">
               <input
                 type="radio"
                 name="mode"
@@ -91,38 +91,40 @@ export function NewInvestigation() {
                 checked={mode === 'manual'}
                 onChange={() => setMode('manual')}
               />
-              <strong>Manual</strong> - Provide incident and context manually
+              <strong>Manual</strong> — Provide incident and context manually
             </label>
           </div>
         </div>
 
         {mode === 'scenario' && (
           <div className="card" style={{ marginBottom: 'var(--spacing-md)' }}>
-            <h3 style={{ marginBottom: 'var(--spacing-md)' }}>Select Scenario</h3>
+            <h3 style={{ marginBottom: 'var(--spacing-md)', fontSize: '15px', fontWeight: 500 }}>Select Scenario</h3>
             <div className="form-group">
               <label className="form-label">Scenario</label>
-              <select
-                value={scenario}
-                onChange={(e) => setScenario(e.target.value)}
-                disabled={scenariosLoading}
-              >
-                <option value="">Select a scenario...</option>
-                {scenariosLoading ? (
-                  <option disabled>Loading...</option>
-                ) : (
-                  scenarios.map(s => (
-                    <option key={s} value={s}>{s}</option>
-                  ))
-                )}
-              </select>
-              {scenariosLoading && <small style={{ color: 'var(--color-text-secondary)' }}>Loading scenarios...</small>}
+              <div className="select-wrapper">
+                <select
+                  value={scenario}
+                  onChange={(e) => setScenario(e.target.value)}
+                  disabled={scenariosLoading}
+                >
+                  <option value="">Select a scenario…</option>
+                  {scenariosLoading ? (
+                    <option disabled>Loading…</option>
+                  ) : (
+                    scenarios.map(s => (
+                      <option key={s} value={s}>{s}</option>
+                    ))
+                  )}
+                </select>
+              </div>
+              {scenariosLoading && <small style={{ color: 'var(--color-text-muted)' }}>Loading scenarios…</small>}
             </div>
           </div>
         )}
 
         {mode === 'manual' && (
           <div className="card" style={{ marginBottom: 'var(--spacing-md)' }}>
-            <h3 style={{ marginBottom: 'var(--spacing-md)' }}>Incident Details</h3>
+            <h3 style={{ marginBottom: 'var(--spacing-md)', fontSize: '15px', fontWeight: 500 }}>Incident Details</h3>
             <div style={{ display: 'grid', gap: 'var(--spacing-md)' }}>
               <div className="form-group">
                 <label className="form-label">Incident ID</label>
@@ -148,20 +150,22 @@ export function NewInvestigation() {
                   value={incident.description}
                   onChange={(e) => setIncident({ ...incident, description: e.target.value })}
                   rows={3}
-                  placeholder="Checkout requests to the payment service are intermittently taking 4-8s..."
+                  placeholder="Checkout requests to the payment service are intermittently taking 4-8s…"
                 />
               </div>
               <div className="form-group">
                 <label className="form-label">Severity</label>
-                <select
-                  value={incident.severity}
-                  onChange={(e) => setIncident({ ...incident, severity: e.target.value })}
-                >
-                  <option value="low">Low</option>
-                  <option value="medium">Medium</option>
-                  <option value="high">High</option>
-                  <option value="critical">Critical</option>
-                </select>
+                <div className="select-wrapper">
+                  <select
+                    value={incident.severity}
+                    onChange={(e) => setIncident({ ...incident, severity: e.target.value })}
+                  >
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                    <option value="critical">Critical</option>
+                  </select>
+                </div>
               </div>
               <div className="form-group">
                 <label className="form-label">Affected Services (comma-separated)</label>
@@ -177,19 +181,19 @@ export function NewInvestigation() {
         )}
 
         <div className="card" style={{ marginBottom: 'var(--spacing-md)' }}>
-          <h3 style={{ marginBottom: 'var(--spacing-md)' }}>Advanced Options</h3>
+          <h3 style={{ marginBottom: 'var(--spacing-md)', fontSize: '15px', fontWeight: 500 }}>Advanced Options</h3>
           <div className="form-group">
             <label className="form-label">Context (JSON, optional)</label>
             <textarea
               value={context}
               onChange={(e) => setContext(e.target.value)}
-              rows={6}
+              rows={5}
               placeholder='{"logs": [], "metrics": {}, "traces": {}, "deployments": {}, "commits": {}}'
               style={{ fontFamily: 'var(--font-mono)', fontSize: '12px' }}
             />
           </div>
           <div className="form-group">
-            <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)', cursor: 'pointer' }}>
+            <label className="checkbox-label">
               <input
                 type="checkbox"
                 checked={useLlm}
@@ -201,8 +205,8 @@ export function NewInvestigation() {
         </div>
 
         {error && (
-          <div className="card" style={{ borderColor: 'var(--color-error)', marginBottom: 'var(--spacing-md)' }}>
-            <p style={{ color: 'var(--color-error)' }}>{error}</p>
+          <div className="error-banner">
+            {error}
           </div>
         )}
 
@@ -211,7 +215,7 @@ export function NewInvestigation() {
             Cancel
           </button>
           <button type="submit" className="btn btn-primary" disabled={creating}>
-            {creating ? 'Creating...' : 'Start Investigation'}
+            {creating ? 'Creating…' : 'Start Investigation'}
           </button>
         </div>
       </form>
